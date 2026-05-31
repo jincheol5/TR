@@ -26,17 +26,17 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            data=Memory(memory_dim=2)
+            memory=Memory(memory_dim=2)
             batch_size=4
             i=0
             for idx in range(0,len(eventstream),batch_size):
                 batch_events=eventstream[idx:idx+batch_size]
-                data.update_memory_data(batch_events=batch_events)
+                memory.update_memory(batch_events=batch_events)
                 print(f"<< {i+1} batch result >>")
-                for node in data.memory.keys():
+                for node in memory.memory.keys():
                     print(f"node_id: {node}")
-                    print(f"node_memory_feature: {data.memory[node]}")
-                    print(f"node_interact_t: {data.interact_t[node]}",end="\n\n")
+                    print(f"node_memory_feature: {memory.memory[node]}")
+                    print(f"node_interact_t: {memory.interact_t[node]}",end="\n\n")
                 i+=1
 
 if __name__=="__main__":

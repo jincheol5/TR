@@ -44,15 +44,15 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            graph_data=TemporalGraph(node_dim=node_dim,device=device)
-            memory_data=Memory(mem_dim=mem_dim,device=device)
+            graph=TemporalGraph(node_dim=node_dim,device=device)
+            memory=Memory(mem_dim=mem_dim,device=device)
             time_encoder=TimeEncoder(time_dim=time_dim)
             memory_updater=GRUMemoryUpdater(
                 mem_dim=mem_dim,
                 msg_dim=msg_dim,
                 time_dim=time_dim,
                 time_encoder=time_encoder,
-                memory_data=memory_data,
+                memory=memory,
                 msg_fn=msg_fn,
                 aggr_fn=aggr_fn
             )
@@ -63,8 +63,8 @@ def test_fn(**kwargs):
                 latent_dim=latent_dim,
                 output_dim=output_dim,
                 time_dim=time_dim,
-                graph_data=graph_data,
-                memory_data=memory_data,
+                graph=graph,
+                memory=memory,
                 time_encoder=time_encoder,
                 n_head=n_head,
                 n_layer=n_layer,
@@ -80,8 +80,8 @@ def test_fn(**kwargs):
                 batch_events=eventstream[idx:idx+batch_size]
 
                 # update data
-                graph_data.update_graph(batch_events=batch_events)
-                memory_data.update_memory_data(batch_events=batch_events)
+                graph.update_graph(batch_events=batch_events)
+                memory.update_memory(batch_events=batch_events)
 
                 ### execute memory, embed module
                 src,tar,event_t=zip(*batch_events)
@@ -139,14 +139,14 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            memory_data=Memory(mem_dim=mem_dim,device=device)
+            memory=Memory(mem_dim=mem_dim,device=device)
             time_encoder=TimeEncoder(time_dim=time_dim)
             memory_updater=GRUMemoryUpdater(
                 mem_dim=mem_dim,
                 msg_dim=msg_dim,
                 time_dim=time_dim,
                 time_encoder=time_encoder,
-                memory_data=memory_data,
+                memory=memory,
                 msg_fn=msg_fn,
                 aggr_fn=aggr_fn
             )
@@ -156,7 +156,7 @@ def test_fn(**kwargs):
                 mem_dim=mem_dim,
                 latent_dim=latent_dim,
                 output_dim=output_dim,
-                memory_data=memory_data
+                memory=memory
             )
 
             # load to device
@@ -168,7 +168,7 @@ def test_fn(**kwargs):
                 batch_events=eventstream[idx:idx+batch_size]
 
                 # update data
-                memory_data.update_memory_data(batch_events=batch_events)
+                memory.update_memory(batch_events=batch_events)
 
                 ### execute memory, embed module
                 src,tar,event_t=zip(*batch_events)
@@ -224,14 +224,14 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            memory_data=Memory(mem_dim=mem_dim,device=device)
+            memory=Memory(mem_dim=mem_dim,device=device)
             time_encoder=TimeEncoder(time_dim=time_dim)
             memory_updater=GRUMemoryUpdater(
                 mem_dim=mem_dim,
                 msg_dim=msg_dim,
                 time_dim=time_dim,
                 time_encoder=time_encoder,
-                memory_data=memory_data,
+                memory=memory,
                 msg_fn=msg_fn,
                 aggr_fn=aggr_fn
             )
@@ -241,7 +241,7 @@ def test_fn(**kwargs):
                 mem_dim=mem_dim,
                 latent_dim=latent_dim,
                 output_dim=output_dim,
-                memory_data=memory_data
+                memory=memory
             )
 
             # load to device
@@ -253,7 +253,7 @@ def test_fn(**kwargs):
                 batch_events=eventstream[idx:idx+batch_size]
 
                 # update data
-                memory_data.update_memory_data(batch_events=batch_events)
+                memory.update_memory(batch_events=batch_events)
 
                 ### execute memory, embed module
                 src,tar,event_t=zip(*batch_events)
@@ -311,15 +311,15 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            graph_data=TemporalGraph(node_dim=node_dim,device=device)
-            memory_data=Memory(mem_dim=mem_dim,device=device)
+            graph=TemporalGraph(node_dim=node_dim,device=device)
+            memory=Memory(mem_dim=mem_dim,device=device)
             time_encoder=TimeEncoder(time_dim=time_dim)
             memory_updater=GRUMemoryUpdater(
                 mem_dim=mem_dim,
                 msg_dim=msg_dim,
                 time_dim=time_dim,
                 time_encoder=time_encoder,
-                memory_data=memory_data,
+                memory=memory,
                 msg_fn=msg_fn,
                 aggr_fn=aggr_fn
             )
@@ -330,8 +330,8 @@ def test_fn(**kwargs):
                 latent_dim=latent_dim,
                 output_dim=output_dim,
                 time_dim=time_dim,
-                graph_data=graph_data,
-                memory_data=memory_data,
+                graph=graph,
+                memory=memory,
                 time_encoder=time_encoder,
                 n_layer=n_layer,
                 is_memory=is_memory
@@ -346,8 +346,8 @@ def test_fn(**kwargs):
                 batch_events=eventstream[idx:idx+batch_size]
 
                 # update data
-                graph_data.update_graph(batch_events=batch_events)
-                memory_data.update_memory_data(batch_events=batch_events)
+                graph.update_graph(batch_events=batch_events)
+                memory.update_memory(batch_events=batch_events)
 
                 ### execute memory, embed module
                 src,tar,event_t=zip(*batch_events)

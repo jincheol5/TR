@@ -38,7 +38,7 @@ class Memory:
         for node in self.memory.keys():
             self.memory[node].to(self.device)
 
-    def update_memory_data(self,batch_events:list):
+    def update_memory(self,batch_events:list):
         """
         Input:
             event: List of tuple (src,tar,timestamp)

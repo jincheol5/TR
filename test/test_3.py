@@ -27,14 +27,14 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            data=Memory(memory_dim=4)
+            memory=Memory(memory_dim=4)
             time_encoder=TimeEncoder(time_dim=4)
             module=GRUMemoryUpdater(
                 mem_dim=4,
                 msg_dim=4,
                 time_dim=4,
                 time_encoder=time_encoder,
-                memory_data=data,
+                memory=memory,
                 msg_fn="mlp",
                 aggr_fn="last"
             )
@@ -42,7 +42,7 @@ def test_fn(**kwargs):
             batch_size=4
             for idx in range(0,len(eventstream),batch_size):
                 batch_events=eventstream[idx:idx+batch_size]
-                data.update_memory_data(batch_events=batch_events)
+                memory.update_memory(batch_events=batch_events)
                 src,tar,event_t=zip(*batch_events)
                 src=torch.tensor(src,dtype=torch.long) # [B,]
                 tar=torch.tensor(tar,dtype=torch.long) # [B,]
@@ -52,7 +52,7 @@ def test_fn(**kwargs):
                     [src,tar],
                     dim=0
                 )
-                pre_nodes_memory=module.memory_data.get_batch_memory(batch_node=nodes)
+                pre_nodes_memory=module.memory.get_batch_memory(batch_node=nodes)
                 print(f"pre memory: {pre_nodes_memory}")
                 
                 module.update_memory(
@@ -61,7 +61,7 @@ def test_fn(**kwargs):
                     event_t=event_t
                 )
                 
-                updated_nodes_memory=module.memory_data.get_batch_memory(batch_node=nodes)
+                updated_nodes_memory=module.memory.get_batch_memory(batch_node=nodes)
                 print(f"updated memory: {updated_nodes_memory}")
 
 

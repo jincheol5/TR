@@ -26,12 +26,12 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            data=TemporalGraph(node_dim=2)
+            graph=TemporalGraph(node_dim=2)
             batch_size=4
             i=0
             for idx in range(0,len(eventstream),batch_size):
                 batch_events=eventstream[idx:idx+batch_size]
-                data.update_graph(batch_events=batch_events)
+                graph.update_graph(batch_events=batch_events)
                 print(f"<< {i+1} batch result >>")
                 for node_id in data.node_ft.keys():
                     print(f"node_id: {node_id}")
@@ -42,7 +42,7 @@ def test_fn(**kwargs):
 
         case 2:
             """
-            Test. TemporalGraphData.find_temporal_neighbor()
+            Test. TemporalGraph.find_temporal_neighbor()
             """
             eventstream=[
                 (3,7,1),
@@ -56,19 +56,19 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            data=TemporalGraph(node_dim=2)
-            data.update_graph(batch_events=eventstream)
+            graph=TemporalGraph(node_dim=2)
+            graph.update_graph(batch_events=eventstream)
             tar_list=[2,3,7]
             cut_t_list=[3.0,5.0,8.0]
             for i in range(3):
-                neighbor,neighbor_t=data.find_temporal_neighbor(tar=tar_list[i],cut_time=cut_t_list[i])
+                neighbor,neighbor_t=graph.find_temporal_neighbor(tar=tar_list[i],cut_time=cut_t_list[i])
                 print(f"tar: {tar_list[i]}")
                 print(f"neighbor: {neighbor}")
                 print(f"neighbor_t:{neighbor_t}",end="\n\n")
 
         case 3:
             """
-            Test. TemporalGraphData.get_batch_data_for_embedding()
+            Test. TemporalGraph.get_batch_data_for_embedding()
             """
             eventstream=[
                 (3,7,1),
@@ -82,12 +82,12 @@ def test_fn(**kwargs):
                 (4,5,8),
                 (1,3,9)
             ]
-            data=TemporalGraph(node_dim=2)
-            data.update_graph(batch_events=eventstream)
+            graph=TemporalGraph(node_dim=2)
+            graph.update_graph(batch_events=eventstream)
             batch_tar=torch.tensor([2,3,7],dtype=torch.long)
             batch_t=torch.tensor([3.0,5.0,8.0],dtype=torch.float32)
 
-            batch_data=data.get_batch_data_for_embedding(batch_tar=batch_tar,batch_t=batch_t)
+            batch_data=graph.get_data_for_embedding(batch_tar=batch_tar,batch_t=batch_t)
             batch_tar_ts=batch_data["batch_tar_ts"] # [B,]
             batch_n=batch_data["batch_n"] # [B,N]
             batch_n_t=batch_data["batch_n_t"] # [B,N] 

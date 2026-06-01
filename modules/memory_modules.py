@@ -3,6 +3,7 @@ import torch.nn as nn
 from typing_extensions import Literal
 from .time_encoding import TimeEncoder
 from .memory import Memory
+from .trajectory import Trajectory
 
 class MemoryUpdater(nn.Module):
     def __init__(self,
@@ -234,6 +235,106 @@ class RNNMemoryUpdater(MemoryUpdater):
             hidden_size=mem_dim
         )
 
+    def update_memory_implement(self,aggr_node,aggr_msg):
+        """
+        Input:
+            aggr_node: [unique_N,]
+            aggr_msg: [unique_N,msg_dim]
+        """
+        pre_memory=self.memory.get_batch_memory(batch_node=aggr_node) # [unique_N,mem_dim]
+        updated_memory=self.memory_updater(aggr_msg,pre_memory) # [unique_N,mem_dim]
+        self.memory.update_memory_state(batch_node=aggr_node,batch_memory=updated_memory)
+
+class TR_GNN_MemoryUpdater(MemoryUpdater):
+    def __init__(self,
+            mem_dim:int,
+            msg_dim:int,
+            time_dim:int,
+            time_encoder:TimeEncoder,
+            memory:Memory,
+            traj:Trajectory,
+            msg_fn:Literal["concat","mlp"]="concat",
+            aggr_fn:Literal["last","mean"]="last"
+        ):
+        super(TR_GNN_MemoryUpdater,self).__init__(
+            mem_dim=mem_dim,
+            msg_dim=msg_dim,
+            time_dim=time_dim,
+            time_encoder=time_encoder,
+            memory=memory,
+            msg_fn=msg_fn,
+            aggr_fn=aggr_fn
+        )
+        self.traj=traj
+
+        # set module
+        if msg_fn=="mlp":
+            self.src_mlp=nn.Sequential(
+                nn.Linear(in_features=mem_dim+mem_dim+1+time_dim,out_features=msg_dim),
+                nn.ReLU(),
+                nn.Linear(in_features=msg_dim,out_features=msg_dim)
+            )
+            self.tar_mlp=nn.Sequential(
+                nn.Linear(in_features=mem_dim+mem_dim+1+time_dim,out_features=msg_dim),
+                nn.ReLU(),
+                nn.Linear(in_features=msg_dim,out_features=msg_dim)
+            )
+        self.memory_updater=nn.GRUCell(
+            input_size=msg_dim,
+            hidden_size=mem_dim
+        )
+
+    # override
+    def create_message(self,
+            src,
+            tar,
+            event_t
+        ):
+        """
+        Notice:
+            - msg_fn="concat"인 경우 msg_dim은 input concat 차원과 같아야 한다.
+        Input:
+            src: [B,]
+            tar: [B,]
+            event_t: [B,]
+        Output:
+            src_msg: [B,msg_dim]
+            tar_msg: [B,msg_dim]
+        """
+        src_mem=self.memory.get_batch_memory(batch_node=src) # [B,mem_dim]
+        src_TR=self.traj.get_batch_TR(batch_node=src) # [B,1]
+        src_ts=self.memory.get_batch_timespan(batch_node=src,batch_t=event_t) # [B,1]
+        src_ts_encoding=self.time_encoder(src_ts) # [B,time_dim]
+
+        tar_mem=self.memory.get_batch_memory(batch_node=tar) # [B,mem_dim]
+        tar_TR=self.traj.get_batch_TR(batch_node=tar) # [B,1]
+        tar_ts=self.memory.get_batch_timespan(batch_node=tar,batch_t=event_t) # [B,1]
+        tar_ts_encoding=self.time_encoder(tar_ts) # [B,time_dim]
+
+        src_msg=torch.concat(
+            [
+                src_mem,
+                tar_mem,
+                src_TR,
+                src_ts_encoding
+            ],
+            dim=-1
+        ) # [B,mem_dim+mem_dim+1+time_dim]
+        tar_msg=torch.concat(
+            [
+                tar_mem,
+                src_mem,
+                tar_TR,
+                tar_ts_encoding,
+            ],
+            dim=-1
+        ) # [B,mem_dim+mem_dim+1+time_dim]
+
+        if self.msg_fn=="mlp":
+            src_msg=self.src_mlp(src_msg) # [B,msg_dim]
+            tar_msg=self.tar_mlp(tar_msg) # [B,msg_dim]
+        return src_msg,tar_msg
+    
     def update_memory_implement(self,aggr_node,aggr_msg):
         """
         Input:

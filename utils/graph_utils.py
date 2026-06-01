@@ -53,40 +53,94 @@ class GraphGenerator:
                 if num_nodes%2!=0:
                     raise ValueError("ladder graph requires an even number of nodes.")
                 graph=nx.ladder_graph(num_nodes//2)
+
+                # mapping that node_id start from 1 
+                mapping={node:node+1 for node in graph.nodes()}
+                graph=nx.relabel_nodes(graph,mapping)
+
+                # remove self loop
                 GraphGenerator.remove_self_loop(graph=graph)
+
+                # change to directed graph
                 graph=graph.to_directed()
+
+                # set edge time list
                 GraphGenerator.set_edge_time_attr(graph=graph,num_times=num_times)
             case 'grid':
                 side_length=int(np.ceil(np.sqrt(num_nodes)))
                 graph=nx.grid_2d_graph(side_length,side_length)
                 graph=nx.convert_node_labels_to_integers(graph)
                 graph=graph.subgraph(range(num_nodes)).copy()
+
+                # mapping that node_id start from 1 
+                mapping={node:node+1 for node in graph.nodes()}
+                graph=nx.relabel_nodes(graph,mapping)
+
+                # remove self loop
                 GraphGenerator.remove_self_loop(graph=graph)
+
+                # change to directed graph
                 graph=graph.to_directed()
+
+                # set edge time list
                 GraphGenerator.set_edge_time_attr(graph=graph,num_times=num_times)
             case 'tree':
-                graph=nx.random_tree(num_nodes)
+                graph=nx.random_labeled_tree(num_nodes)
+
+                # mapping that node_id start from 1 
+                mapping={node:node+1 for node in graph.nodes()}
+                graph=nx.relabel_nodes(graph,mapping)
+
+                # remove self loop
                 GraphGenerator.remove_self_loop(graph=graph)
+
+                # change to directed graph
                 graph=graph.to_directed()
+
+                # set edge time list
                 GraphGenerator.set_edge_time_attr(graph=graph,num_times=num_times)
             case 'erdos_renyi':
                 p=min(np.log2(num_nodes)/num_nodes,0.5)
                 graph=nx.erdos_renyi_graph(num_nodes,p)
+
+                # mapping that node_id start from 1 
+                mapping={node:node+1 for node in graph.nodes()}
+                graph=nx.relabel_nodes(graph,mapping)
+
+                # remove self loop
                 GraphGenerator.remove_self_loop(graph=graph)
+
+                # change to directed graph
                 graph=graph.to_directed()
+
+                # remove random edges
                 if num_nodes>=500:
                     GraphGenerator.remove_random_edges(graph=graph,ratio=0.7)
                 else:
                     GraphGenerator.remove_random_edges(graph=graph,ratio=0.5)
+                
+                # set edge time list
                 GraphGenerator.set_edge_time_attr(graph=graph,num_times=num_times)
             case 'barabasi_albert':
                 if num_nodes<=4:
                     raise ValueError("barabasi_albert graph requires more than 4 number of nodes.")
                 m=random.choice([4,5])
                 graph=nx.barabasi_albert_graph(num_nodes,m)
+
+                # mapping that node_id start from 1 
+                mapping={node:node+1 for node in graph.nodes()}
+                graph=nx.relabel_nodes(graph,mapping)
+
+                # remove self loop
                 GraphGenerator.remove_self_loop(graph=graph)
+                
+                # change to directed graph
                 graph=graph.to_directed()
+
+                # remove random edges
                 GraphGenerator.remove_random_edges(graph=graph,ratio=0.7)
+
+                # set edge time list
                 GraphGenerator.set_edge_time_attr(graph=graph,num_times=num_times)
             case 'community':
                 if num_nodes<4:
@@ -103,10 +157,22 @@ class GraphGenerator:
                         if (i//community_size)!=(j//community_size):
                             if random.random()<0.01:
                                 graph.add_edge(i,j)
+                
+                # mapping that node_id start from 1 
+                mapping={node:node+1 for node in graph.nodes()}
+                graph=nx.relabel_nodes(graph,mapping)
+
+                # remove self loop
                 GraphGenerator.remove_self_loop(graph=graph)
+
+                # change to directed graph
                 graph=graph.to_directed()
+
+                # remove random edges
                 if num_nodes>=500:
                     GraphGenerator.remove_random_edges(graph=graph,ratio=0.7)
+                
+                # set edge time list
                 GraphGenerator.set_edge_time_attr(graph=graph,num_times=num_times)
             case 'caveman':
                 if num_nodes<4:
@@ -123,10 +189,22 @@ class GraphGenerator:
                     u,v=random.sample(list(graph.nodes()),2)
                     if not graph.has_edge(u,v):
                         graph.add_edge(u,v)
+
+                # mapping that node_id start from 1 
+                mapping={node:node+1 for node in graph.nodes()}
+                graph=nx.relabel_nodes(graph,mapping)
+
+                # remove self loop
                 GraphGenerator.remove_self_loop(graph=graph)
+
+                # change to directed graph
                 graph=graph.to_directed()
+
+                # remove random edges
                 if num_nodes>=500:
                     GraphGenerator.remove_random_edges(graph=graph,ratio=0.7)
+                
+                # set edge time list
                 GraphGenerator.set_edge_time_attr(graph=graph,num_times=num_times)
         return graph
 

@@ -33,11 +33,11 @@ def test_fn(**kwargs):
                 batch_events=eventstream[idx:idx+batch_size]
                 graph.update_graph(batch_events=batch_events)
                 print(f"<< {i+1} batch result >>")
-                for node_id in data.node_ft.keys():
+                for node_id in graph.node_ft.keys():
                     print(f"node_id: {node_id}")
-                    print(f"node_feature: {data.node_ft[node_id]}")
-                    print(f"node_neighbor: {data.neighbor[node_id]}")
-                    print(f"node_neighbor_t: {data.neighbor_t[node_id]}",end="\n\n")
+                    print(f"node_feature: {graph.node_ft[node_id]}")
+                    print(f"node_neighbor: {graph.neighbor[node_id]}")
+                    print(f"node_neighbor_t: {graph.neighbor_t[node_id]}",end="\n\n")
                 i+=1
 
         case 2:

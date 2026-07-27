@@ -3,7 +3,10 @@ import torch
 import torch.nn as nn
 
 class TimeEncoder(nn.Module):
-    def __init__(self,time_dim:int,parameter_requires_grad:bool=True):
+    def __init__(self,
+            time_dim:int,
+            parameter_requires_grad:bool=True
+        ):
         """
         Time encoder.
         :param time_dim: int, dimension of time encodings

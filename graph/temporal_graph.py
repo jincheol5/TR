@@ -49,6 +49,12 @@ class TemporalGraph:
         ):
         self.rng=random.Random(seed)
 
+    def get_num_node(self):
+        return self.n_node
+
+    def get_num_event(self):
+        return self.n_event
+
     def TR_sampling(self,
 
         ):

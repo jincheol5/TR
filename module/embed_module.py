@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.nn as nn
-from graph import TemporalGraph
+from graph import TGN_Graph
 from .time_encoder import TimeEncoder
 from .mem_module import Memory
 from .attn_module import TemporalGraphAttn
@@ -94,7 +94,7 @@ class GraphEmbeddingModule(EmbeddingModule):
             latent_dim:int=32, 
             output_dim:int=32,
             time_dim:int=32,
-            graph:TemporalGraph=None,
+            graph:TGN_Graph=None,
             memory:Memory=None,
             n_layer:int=1,
             n_neighbor:int=5,
@@ -136,31 +136,24 @@ class GraphEmbeddingModule(EmbeddingModule):
             n_layer:int=1
         ):
         """
-        embedding 할 노드들
-        embedding 할 노드들의 이웃 노드들
-
         Input:
             tar: [n_tar,]
             tar_t: [n_tar,]
             n_layer: int
-            n_neighbor: int
         Return:
+            updated_tar_ft: [n_tar,output_dim]
         """
         tar_ft=self.graph.get_node_ft(node=tar) # [n_tar,node_dim]
         if self.use_memory:
             tar_mem=self.memory.get_mem_ft(node=tar)
             tar_ft=torch.concat(
-                [tar_mem,tar_ft],
+                [tar_ft,tar_mem],
                 dim=-1
             ) # [n_tar,node_dim+mem_dim]
 
         if n_layer==0:
             return tar_ft
         else:
-            """
-            neighbor_id: [n_tar,n_neighbor]
-            neighbor_t: [n_tar,n_neighbor]
-            """
             tar_ft=self.compute_embedding(
                 tar=tar,
                 tar_t=tar_t,
@@ -173,18 +166,15 @@ class GraphEmbeddingModule(EmbeddingModule):
                 n_neighbor=self.n_neighbor
             )
             neighbor=temporal_neighbor["neighbor"]
+            neighbor_mask=temporal_neighbor["neighbor_mask"]
             neighbor_t=temporal_neighbor["neighbor_t"]
             neighbor_ts=temporal_neighbor["neighbor_ts"]
             neighbor_edge=temporal_neighbor["neighbor_edge"]
-
 
             # flatten for neighbor embedding
             n_tar,n_neighbor=neighbor.size()
             neighbor=neighbor.flatten() # [n_tar,n_neighbor] -> [n_tar x n_neighbor,]
             neighbor_t=neighbor_t.flatten() # [n_tar,n_neighbor] -> [n_tar x n_neighbor,]
-
-            # compute neighbor_mask
-            neighbor_mask=neighbor!=0 # [n_tar x n_neighbor,], bool
             
             # apply time encoding
             tar_ts=torch.zeros_like(tar,dtype=torch.float32,device=tar.device).unsqueeze(-1) # [n_tar,1]
@@ -201,7 +191,6 @@ class GraphEmbeddingModule(EmbeddingModule):
 
             # reshape
             neighbor_ft=neighbor_ft.reshape(n_tar,n_neighbor,-1) # -> [n_tar,n_neighbor,tar_dim] or [n_tar,n_neighbor,output_dim]
-            neighbor_mask=neighbor_mask.reshape(n_tar,n_neighbor,) # -> [n_tar,n_neighbor]
 
             # get edge feature
             neighbor_edge_ft=self.graph.get_edge_ft(edge=neighbor_edge) # [n_tar,n_neighbor,edge_dim]
@@ -226,7 +215,7 @@ class GraphSumEmbedding(GraphEmbeddingModule):
             latent_dim:int=32, 
             output_dim:int=32,
             time_dim:int=32,
-            graph:TemporalGraph=None,
+            graph:TGN_Graph=None,
             memory:Memory=None,
             n_layer:int=1,
             n_neighbor:int=5,
@@ -327,7 +316,7 @@ class GraphAttnEmbedding(GraphEmbeddingModule):
             latent_dim:int=32, 
             output_dim:int=32,
             time_dim:int=32,
-            graph:TemporalGraph=None,
+            graph:TGN_Graph=None,
             memory:Memory=None,
             n_layer:int=1,
             n_neighbor:int=5,

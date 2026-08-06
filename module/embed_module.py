@@ -86,7 +86,6 @@ class TimeProjectionEmbedding(EmbeddingModule):
         tar_ft=tar_mem*(1+self.embedding_layer(tar_ts)) # [B,mem_dim]
         return tar_ft
 
-
 class GraphEmbeddingModule(EmbeddingModule):
     def __init__(self,
             node_dim:int=32,

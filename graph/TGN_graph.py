@@ -31,7 +31,6 @@ class TGN_Graph(GNN_Graph):
             tar: [B,]
             tar_t: [B,]
             n_neighbor: int
-            seed: int
         Return:
             neighbor: [B,num_neighbor]
             neighbor_t: [B,num_neighbor]

@@ -4,7 +4,6 @@ import torch.nn as nn
 class TemporalGraphAttn(nn.Module):
     """
     torch.nn.MultiheadAttention은 embed_dim % num_heads=0 이여야 함
-    h^0_i=s^t_i||v^t_0
     """
     def __init__(self,
             input_dim:int,
@@ -20,13 +19,17 @@ class TemporalGraphAttn(nn.Module):
         self.latent_dim=latent_dim
         self.output_dim=output_dim
         self.time_dim=time_dim
+
         self.q_dim=input_dim+time_dim
         self.kv_dim=input_dim+edge_dim+time_dim
+        if not self.q_dim%n_head==0:
+            raise Exception(f"query_dim(input_dim+time_dim) % n_head = 0이여야 합니다.")
         self.multi_head_attn=nn.MultiheadAttention(
             embed_dim=self.q_dim,
             kdim=self.kv_dim,
             vdim=self.kv_dim,
-            num_heads=n_head
+            num_heads=n_head,
+            batch_first=True # [batch_size,seq_len,embed_dim]
         )
         self.MLPs=nn.Sequential(
             nn.Linear(
@@ -65,20 +68,15 @@ class TemporalGraphAttn(nn.Module):
         query=torch.cat(
             [tar_ft,tar_ts_ft],
             dim=2
-        ) # -> [B,1,input_dim+time_dim]
+        ) # -> [B,1,q_dim]
         key=torch.cat(
             [neighbor_ft,neighbor_edge_ft,neighbor_ts_ft],
             dim=2
-        ) # -> [B,K,input_dim+edge_dim+time_dim]
+        ) # -> [B,K,kv_dim]
         value=torch.cat(
             [neighbor_ft,neighbor_edge_ft,neighbor_ts_ft],
             dim=2
-        ) # -> [B,K,input_dim+edge_dim+time_dim]
-
-        ### set to [L,B,D]
-        query=query.permute([1,0,2]) # -> [1,B,input_dim+time_dim] 
-        key=key.permute([1,0,2]) # -> [N,B,input_dim+edge_dim+time_dim] 
-        value=value.permute([1,0,2]) # -> [N,B,input_dim+edge_dim+time_dim] 
+        ) # -> [B,K,kv_dim]
 
         ### transform n_mask for nn.MultiheadAttention's key_padding_mask
         # key_padding_mask에서는 True가 padding될 neighbor을 의미
@@ -93,13 +91,17 @@ class TemporalGraphAttn(nn.Module):
         key_padding_mask[invalid_neighbor_mask.squeeze(),0]=False 
 
         ### Multi-head attention
+        # query: [B,1,q_dim]
+        # key:   [B,K,kv_dim]
+        # value: [B,K,kv_dim]
         attn_output,_=self.multi_head_attn(
             query=query,
             key=key,
             value=value,
-            key_padding_mask=key_padding_mask
-        ) # attn_output: [1,B,input_dim+time_dim], attn_weight: [B,1,N]
-        attn_output=attn_output.squeeze() # -> [B,input_dim+time_dim]
+            key_padding_mask=key_padding_mask,
+            need_weights=False
+        ) # attn_output: [B,1,q_dim], attn_weight: None
+        attn_output=attn_output.squeeze(dim=1) # -> [B,q_dim]
 
         ### 이웃노드가 없는 target node의 attn 결과 feature를 0 tensor으로 후처리
         attn_output=attn_output.masked_fill(invalid_neighbor_mask,0) # mask_fill: mask=True인 위치를 value로 덮어쓰기
@@ -109,7 +111,7 @@ class TemporalGraphAttn(nn.Module):
         ffn_input=torch.cat(
             [attn_output,tar_ft],
             dim=-1
-        ) # -> [B,input_dim+time_dim||input_dim]
+        ) # -> [B,q_dim||input_dim]
         output=self.MLPs(ffn_input) # [B,output_dim]
         return output
 
@@ -139,7 +141,8 @@ class TransformerEncoderBlock(nn.Module):
         self.multi_head_attention=nn.MultiheadAttention(
             embed_dim=attn_dim,
             num_heads=n_head,
-            dropout=dropout
+            dropout=dropout,
+            batch_first=True
         )
         self.dropout=nn.Dropout(dropout)
         self.linear_layers=nn.ModuleList([
@@ -165,16 +168,12 @@ class TransformerEncoderBlock(nn.Module):
         ### Pre-LN
         norm_z=self.norm_layers[0](z) # [B,2l,4d]
 
-        ### PyTorch MultiheadAttention 기본 입력 shape=[seq_len,batch_size,attn_dim]
-        norm_z_t=norm_z.transpose(0,1) # [2l,B,4d] 
-
         ### Self-Attention: query = key = value = z
         attn_out,_=self.multi_head_attention(
-            query=norm_z_t,
-            key=norm_z_t,
-            value=norm_z_t
-        ) # [2l,B,4d]
-        attn_out=attn_out.transpose(0,1)  # [B,2l,4d]
+            query=norm_z,
+            key=norm_z,
+            value=norm_z
+        ) # [B,2l,4d]
 
         ### Residual connection
         out=z+self.dropout(attn_out)  

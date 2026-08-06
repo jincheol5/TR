@@ -24,7 +24,7 @@ class TemporalGraph:
         self.adj=defaultdict(list)
         self.adj_t=defaultdict(list)
         self.edge_events=[]
-        for event in graph_df.itertuples(index=False): # col: [u,i,ts,label,ids]
+        for event in graph_df.itertuples(index=False): # col: [u,i,ts,idx=edge_id]
             src=int(event.u)
             dst=int(event.i)
             t=float(event.ts)

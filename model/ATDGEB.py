@@ -123,12 +123,12 @@ class ATDGEB_TR(ATDGEB_Base):
         ):
         """
         Input:
-            pos_edge: dict
+            pos_pair: dict
                 key: src, dst
                 value: 
                     src: [B,] 
                     dst: [B,] 
-            neg_edge: dict
+            neg_pair: dict
                 key: src, dst
                 value: 
                     src: [B,] 

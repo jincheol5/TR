@@ -57,81 +57,185 @@ class TemporalGraph:
     def get_num_event(self):
         return self.n_event
 
-    def compute_TR_step(self,
-            Q:set,
-            TR_info:dict
-        ):
-        """
-        양방향 그래프를 가정하기 때문에 self.adj로 이웃 노드들을 가져온다.
-        self.adj와 self.adj_t는 이미 시간순 오름차순 정렬되어 있다.
-        """
-        Q_next=set()
-        for node in Q:
-            idx=bisect.bisect_right(self.adj_t[node],TR_info[node]["last_t"]) # adj_t 중 node의 last_t 보다 큰 시간 값의 첫번째 인덱스
-            if idx==len(self.adj_t[node]):
-                continue # 해당 값이 없는 경우 리스트 길이 반환하는 점 이용하여 다음 노드로 넘어감
-            for (neighbor,_),event_t in zip(self.adj[node][idx:],self.adj_t[node][idx:]):
-                if event_t<TR_info[neighbor]["last_t"]:
-                    TR_info[neighbor]["r"]=1
-                    TR_info[neighbor]["last_t"]=event_t
-                    TR_info[neighbor]["hop"]=TR_info[node]["hop"]+1
-                    if TR_info[node]["hop"]==0:
-                        TR_info[neighbor]["first_t"]=event_t
-                    else:
-                        TR_info[neighbor]["first_t"]=TR_info[node]["first_t"]
-                    Q_next.add(neighbor)
-        return Q_next
-
     def compute_TR(self,
-            source:int
+            source:int,
+            query_time:float,
+            max_hop:int|None=None
         ):
         """
-        Compute Temporal Reachability Info using Temporal BFS.
+        Compute Temporal Reachability using hop-layer Temporal BFS.
+
+        조건:
+            - query_time 이전의 이벤트만 고려
+            - temporal path는 시간 증가 조건을 만족해야 함
+            - 최대 max_hop까지만 탐색
+            - 각 node의 shortest temporal hop 계산
+            - 같은 shortest hop 내에서는 earliest-arrival path를 대표로 저장
+
+        max_hop 만큼만 step 반복하여 최대 hop 수 조정, None이면 가능한 최대 hop까지
         
         TR_info value:
-            r: temporal reachability result, 도달 가능하면 1 아니면 0
-            last_t: source -> target path 중 마지막 상호작용 시간
-            first_t: source -> target path 중 첫 번째 상호작용 시간
-            hop: source -> target path hop 수
+            r: temporal reachable이면 1, 아니면 0
+            last_t: shortest-hop path들 중 earliest-arrival path의 마지막 이벤트 시간
+            first_t: shortest-hop path들 중 earliest-arrival path의 첫 번째 이벤트 시간
+            hop: source -> target의 shortest temporal hop
         
         Return:
             TR_info: dict 
                 key: node id
                 value: {
                     "r":int,
-                    "last_t":float,
-                    "first_t":float,
                     "hop":int
+                    "first_t":float,
+                    "last_t":float
                 }
         """
         INF=float('inf')
+        if max_hop is None:
+            max_hop=self.n_node-1
         TR_info={
             node: {
-                "r": 0,
-                "last_t":INF,
+                "r":0,
+                "hop":INF,
                 "first_t":INF,
-                "hop": 0
+                "last_t":INF
             }
             for node in range(1,self.n_node+1)
         }
         TR_info[source]={
-            "r": 1,
-            "last_t":float("-inf"), # 첫 조회 시 event_t=0.0 인 경우도 탐색을 위해서 -inf 값 설정
+            "r":1,
+            "hop":0,
             "first_t":0.0,
-            "hop": 0
+            "last_t":float("-inf") # 첫 조회 시 event_t=0.0 인 경우도 탐색을 위해서 -inf 값 설정
         }
-        Q=set()
-        Q.add(source)
-        while Q:
-            Q=self.compute_TR_step(
-                Q=Q,
-                TR_info=TR_info
-            )
+
+        ### Step loop
+        # layer state: 현재 hop에서 node에 도달하는 earliest arrival time
+        # layer first_t: 현재 hop의 earliest-arrival path의 첫 이벤트 시간
+        cur_layer_state={ # 0-hop layer state
+            source:float("-inf")
+        }
+        cur_layer_first_t={ 
+            source:0.0
+        }
+        for hop in range(1,max_hop+1):
+            next_layer_state={}
+            next_layer_first_t={}
+            for node,arrival_t in cur_layer_state.items():
+                # arrival_t보다 늦은 첫 이벤트
+                start_idx=bisect.bisect_right(
+                    self.adj_t[node],
+                    arrival_t
+                )
+                # arrival_t보다 늦은 이벤트가 없는 경우
+                if start_idx==len(self.adj_t[node]):
+                    continue
+
+                # query_time보다 늦은 첫 이벤트
+                end_idx=bisect.bisect_right(
+                    self.adj_t[node],
+                    query_time
+                )
+                for (neighbor,_),event_t in zip(
+                        self.adj[node][start_idx:end_idx],
+                        self.adj_t[node][start_idx:end_idx]
+                    ):
+                    # 현재 hop에서 neighbor에 더 빨리 도착하는 path만 유지
+                    if neighbor in next_layer_state and next_layer_state[neighbor]<=event_t:
+                        continue
+                    next_layer_state[neighbor]=event_t
+
+                    # 현재 path의 first_t 전달
+                    if hop==1:
+                        next_layer_first_t[neighbor]=event_t
+                    else:
+                        next_layer_first_t[neighbor]=cur_layer_first_t[node]
+
+            # next_layer_state가 비어있으면 종료
+            if not next_layer_state:
+                break
+
+            # 이번 hop에서 처음 발견된 node만 shortest-hop 결과로 TR_info에 저장
+            # 현재 hop의 모든 후보를 비교해서 earliest arrival만 남긴 뒤 저장
+            for neighbor,event_t in next_layer_state.items():
+                if TR_info[neighbor]["r"]==0:
+                    TR_info[neighbor]["r"]=1
+                    TR_info[neighbor]["hop"]=hop
+                    TR_info[neighbor]["first_t"]=next_layer_first_t[neighbor]
+                    TR_info[neighbor]["last_t"]=event_t
+
+            # 다음 hop layer로 이동
+            cur_layer_state=next_layer_state
+            cur_layer_first_t=next_layer_first_t
         return TR_info
+
+    def random_TR_sampling(self,
+            n_sample:int,
+            query_time:float,
+            max_hop:int=5
+        ):
+        """
+        """
+        n_pos=n_sample
+        n_neg=n_sample
+
+        pos_pairs=[]
+        neg_pairs=[]
+        pair_info={}
+
+        TR_cache={}
+        nodes=list(range(1,self.n_node+1))
+        while len(pos_pairs)<n_pos or len(neg_pairs)<n_neg:
+            src=self.rng.choice(nodes)
+            dst=self.rng.choice(nodes)
+            if src==dst:
+                continue
+            if (src,dst) in pair_info:
+                continue
+            if src not in TR_cache:
+                TR_cache[src]=self.compute_TR(
+                    source=src,
+                    query_time=query_time,
+                    max_hop=max_hop
+                )
+            info=TR_cache[src][dst]
+            if info["r"]==1:
+                if len(pos_pairs)>=n_pos:
+                    continue
+                pos_pairs.append((src,dst))
+            else:
+                if len(neg_pairs)>=n_neg:
+                    continue
+                neg_pairs.append((src,dst))
+            pair_info[(src,dst)]=info.copy()
+
+        pos_pair={
+            "src":torch.tensor(
+                [src for src,_ in pos_pairs],
+                dtype=torch.long
+            ),
+            "dst":torch.tensor(
+                [dst for _,dst in pos_pairs],
+                dtype=torch.long
+            )
+        }
+        neg_pair={
+            "src":torch.tensor(
+                [src for src,_ in neg_pairs],
+                dtype=torch.long
+            ),
+            "dst":torch.tensor(
+                [dst for _,dst in neg_pairs],
+                dtype=torch.long
+            )
+        }
+        return pos_pair,neg_pair,pair_info
 
     def TR_sampling(self,
             n_sample:int,
-            n_path:int
+            n_path:int,
+            max_hop:int,
+            query_time:float
         ):
         """
         n_sample 개의 pos_pair, neg_pair 각각 생성.
@@ -152,32 +256,82 @@ class TemporalGraph:
             key: (src,dst)
             value:
                 r: 1 or 0
-                last_t: src->dst path의 마지막 event_t
-                first_t: src->dst path의 첫 번째 event_t
                 hop: src->dst path의 hop 수
+                first_t: src->dst path의 첫 번째 event_t
+                last_t: src->dst path의 마지막 event_t
         
         Input:
             n_sample: int, 
             n_path: int,
-
+            max_hop: int,
+            query_time: float
+            
         Return:
             pos_pair: dict
                 key: src, dst
                 value: 
-                    src: [n_sample,] 
-                    dst: [n_sample,] 
+                    src: [n_sample,] long tensor
+                    dst: [n_sample,] long tensor
             neg_pair: dict
                 key: src, dst
                 value: 
-                    src: [n_sample,] 
-                    dst: [n_sample,]
+                    src: [n_sample,] long tensor
+                    dst: [n_sample,] long tensor
             pair_info: dict
                 key: (src,dst)
                 value:
                     r:int
-                    last_t:float
-                    first_t:float
                     hop:int
-
-        쿼리 시점들에 대한 샘플링은 어떻게 수행할 것인가?
+                    first_t:float
+                    last_t:float
         """
+        pos_src=[]
+        pos_dst=[]
+        neg_src=[]
+        neg_dst=[]
+        pair_info={}
+        nodes=list(range(1,self.n_node+1))
+        while len(pos_src)<n_sample:
+            source=self.rng.choice(nodes)
+            TR_info=self.compute_TR(
+                source=source,
+                query_time=query_time,
+                max_hop=max_hop
+            )
+            pos_targets=[
+                node
+                for node in nodes
+                if node!=source and TR_info[node]["r"]==1
+            ]
+            neg_targets=[
+                node
+                for node in nodes
+                if node!=source and TR_info[node]["r"]==0
+            ]
+            if not pos_targets or not neg_targets:
+                continue
+            k=min(
+                n_path,
+                len(pos_targets),
+                len(neg_targets),
+                n_sample-len(pos_src)
+            )
+            sampled_pos_tar=self.rng.sample(pos_targets,k)
+            sampled_neg_tar=self.rng.sample(neg_targets,k)
+            for dst in sampled_pos_tar:
+                pos_src.append(source)
+                pos_dst.append(dst)
+                pair_info[(source,dst)]=TR_info[dst].copy()
+            for dst in sampled_neg_tar:
+                neg_src.append(source)
+                neg_dst.append(dst)
+                pair_info[(source,dst)]=TR_info[dst].copy()
+        pos_pair={
+            "src":torch.tensor(pos_src,dtype=torch.long),
+            "dst":torch.tensor(pos_dst,dtype=torch.long)
+        }
+        neg_pair={
+            "src":torch.tensor(neg_src,dtype=torch.long),
+            "dst":torch.tensor(neg_dst,dtype=torch.long)
+        }
+        return pos_pair,neg_pair,pair_info

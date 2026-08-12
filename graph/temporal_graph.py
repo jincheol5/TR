@@ -29,7 +29,7 @@ class TemporalGraph:
         for event in graph_df.itertuples(index=False): # col: [u,i,ts,idx=edge_id]
             src=int(event.u)
             dst=int(event.i)
-            t=float(event.ts)
+            t=float(event.t)
             edge_id=int(event.idx)
             # edge 양방향 저장
             self.adj[dst].append((src,edge_id))
@@ -44,7 +44,7 @@ class TemporalGraph:
         self.n_event=graph_df["idx"].max()
         self.bipartite=bipartite
         self.max_u=graph_df["u"].max()
-        self.max_t=graph_df["ts"].max()
+        self.max_t=graph_df["t"].max()
 
     def set_random_seed(self,
             seed:int
@@ -59,7 +59,7 @@ class TemporalGraph:
 
     def compute_TR(self,
             source:int,
-            query_time:float,
+            query_time:float|None=None,
             max_hop:int|None=None
         ):
         """
@@ -132,10 +132,13 @@ class TemporalGraph:
                     continue
 
                 # query_time보다 늦은 첫 이벤트
-                end_idx=bisect.bisect_right(
-                    self.adj_t[node],
-                    query_time
-                )
+                if query_time is None:
+                    end_idx=len(self.adj_t[node])
+                else:
+                    end_idx=bisect.bisect_right(
+                        self.adj_t[node],
+                        query_time
+                    )
                 for (neighbor,_),event_t in zip(
                         self.adj[node][start_idx:end_idx],
                         self.adj_t[node][start_idx:end_idx]
@@ -169,169 +172,143 @@ class TemporalGraph:
             cur_layer_first_t=next_layer_first_t
         return TR_info
 
-    def random_TR_sampling(self,
+    def random_TR_sampling(
+            self,
             n_sample:int,
-            query_time:float,
-            max_hop:int=5
+            n_pair:int,
+            query_time:float|None=None,
+            max_hop:int|None=5
         ):
         """
+        Input:
+            n_sample: pos/neg sample 생성 개수
+            n_pair: src 당 pos/neg pair 생성 개수
         """
-        n_pos=n_sample
-        n_neg=n_sample
-
         pos_pairs=[]
         neg_pairs=[]
         pair_info={}
-
         TR_cache={}
         nodes=list(range(1,self.n_node+1))
-        while len(pos_pairs)<n_pos or len(neg_pairs)<n_neg:
+        for _ in range(self.n_node*3):
+            if len(pos_pairs)>=n_sample:
+                break
             src=self.rng.choice(nodes)
-            dst=self.rng.choice(nodes)
-            if src==dst:
-                continue
-            if (src,dst) in pair_info:
-                continue
             if src not in TR_cache:
                 TR_cache[src]=self.compute_TR(
                     source=src,
                     query_time=query_time,
                     max_hop=max_hop
                 )
-            info=TR_cache[src][dst]
-            if info["r"]==1:
-                if len(pos_pairs)>=n_pos:
-                    continue
-                pos_pairs.append((src,dst))
-            else:
-                if len(neg_pairs)>=n_neg:
-                    continue
-                neg_pairs.append((src,dst))
-            pair_info[(src,dst)]=info.copy()
+            TR_info=TR_cache[src]
 
-        pos_pair={
-            "src":torch.tensor(
-                [src for src,_ in pos_pairs],
-                dtype=torch.long
-            ),
-            "dst":torch.tensor(
-                [dst for _,dst in pos_pairs],
-                dtype=torch.long
+            pos_nodes=[
+                n for n in nodes
+                if n!=src
+                and TR_info[n]["r"]==1
+                and (src,n) not in pair_info
+            ]
+            neg_nodes=[
+                n for n in nodes
+                if n!=src
+                and TR_info[n]["r"]==0
+                and (src,n) not in pair_info
+            ]
+            n=min(
+                n_pair, # src당 최대 생성 개수
+                n_sample-len(pos_pairs), # 전체 목표까지 남은 개수
+                len(pos_nodes), # 현재 src의 positive 후보 수
+                len(neg_nodes) # 현재 src의 negative 후보 수
             )
+            if n==0:
+                continue
+
+            pos_dst=self.rng.sample(pos_nodes,n)
+            neg_dst=self.rng.sample(neg_nodes,n)
+            pos_pairs+=[(src,dst) for dst in pos_dst]
+            neg_pairs+=[(src,dst) for dst in neg_dst]
+            for dst in pos_dst+neg_dst:
+                pair_info[(src,dst)]=TR_info[dst].copy()
+
+        pairs=pos_pairs+neg_pairs
+        src=torch.tensor(
+            [s for s,_ in pairs],
+            dtype=torch.long
+        )
+        dst=torch.tensor(
+            [d for _,d in pairs],
+            dtype=torch.long
+        )
+        label=torch.tensor(
+            [1]*len(pos_pairs)+[0]*len(neg_pairs),
+            dtype=torch.float32
+        )
+        pair_info=[
+            pair_info[pair]
+            for pair in pairs
+        ]
+        return {
+            "src":src,
+            "dst":dst,
+            "label":label,
+            "pos_mask":label.bool(),
+            "pair_info":pair_info
         }
-        neg_pair={
-            "src":torch.tensor(
-                [src for src,_ in neg_pairs],
-                dtype=torch.long
-            ),
-            "dst":torch.tensor(
-                [dst for _,dst in neg_pairs],
-                dtype=torch.long
-            )
-        }
-        return pos_pair,neg_pair,pair_info
+        
 
     def TR_sampling(self,
+            source:torch.Tensor,
             n_sample:int,
-            n_path:int,
-            max_hop:int,
-            query_time:float
+            query_time:float|None=None,
+            max_hop:int|None=5
         ):
         """
-        n_sample 개의 pos_pair, neg_pair 각각 생성.
-            all pos_pair: n_sample개
-            all neg_pair: n_sample개
-        
-        임의의 source node 선택 후 n_path개 만큼의 pos,neg pair 생성.
-            pos_pair: n_path개
-            neg_pair: n_path개
-            pos_pair의 개수 k_pos < n_path 인 경우 다음과 같이 생성.
-                pos_pair: k_pos개
-                neg_pair: k_pos개 
-
-        n_sample개 다 채워지면 source node 선택 종료.
-
-        선택된 pair sample들의 정보를 pair_info dict로 반환.
-        pair_info: dict
-            key: (src,dst)
-            value:
-                r: 1 or 0
-                hop: src->dst path의 hop 수
-                first_t: src->dst path의 첫 번째 event_t
-                last_t: src->dst path의 마지막 event_t
-        
         Input:
-            n_sample: int, 
-            n_path: int,
-            max_hop: int,
-            query_time: float
-            
+            source: [n_src,] long tensor
+            n_sample: int, 각 src마다 생성할 positve/negative sample 개수
         Return:
-            pos_pair: dict
-                key: src, dst
-                value: 
-                    src: [n_sample,] long tensor
-                    dst: [n_sample,] long tensor
-            neg_pair: dict
-                key: src, dst
-                value: 
-                    src: [n_sample,] long tensor
-                    dst: [n_sample,] long tensor
-            pair_info: dict
-                key: (src,dst)
-                value:
-                    r:int
-                    hop:int
-                    first_t:float
-                    last_t:float
         """
-        pos_src=[]
-        pos_dst=[]
-        neg_src=[]
-        neg_dst=[]
+        pos_pairs=[]
+        neg_pairs=[]
         pair_info={}
         nodes=list(range(1,self.n_node+1))
-        while len(pos_src)<n_sample:
-            source=self.rng.choice(nodes)
+        for src in source.detach().cpu().tolist():
             TR_info=self.compute_TR(
-                source=source,
+                source=src,
                 query_time=query_time,
                 max_hop=max_hop
             )
-            pos_targets=[
-                node
-                for node in nodes
-                if node!=source and TR_info[node]["r"]==1
+            pos_nodes=[
+                n for n in nodes
+                if n!=src and TR_info[n]["r"]==1
             ]
-            neg_targets=[
-                node
-                for node in nodes
-                if node!=source and TR_info[node]["r"]==0
+            neg_nodes=[
+                n for n in nodes
+                if n!=src and TR_info[n]["r"]==0
             ]
-            if not pos_targets or not neg_targets:
-                continue
-            k=min(
-                n_path,
-                len(pos_targets),
-                len(neg_targets),
-                n_sample-len(pos_src)
+            pos_dst=self.rng.sample(
+                pos_nodes,
+                min(len(pos_nodes),n_sample)
             )
-            sampled_pos_tar=self.rng.sample(pos_targets,k)
-            sampled_neg_tar=self.rng.sample(neg_targets,k)
-            for dst in sampled_pos_tar:
-                pos_src.append(source)
-                pos_dst.append(dst)
-                pair_info[(source,dst)]=TR_info[dst].copy()
-            for dst in sampled_neg_tar:
-                neg_src.append(source)
-                neg_dst.append(dst)
-                pair_info[(source,dst)]=TR_info[dst].copy()
+            neg_dst=self.rng.sample(
+                neg_nodes,
+                min(len(neg_nodes),n_sample)
+            )
+            for dst in pos_dst:
+                pos_pairs.append((src,dst))
+                pair_info[(src,dst)]=TR_info[dst].copy()
+            for dst in neg_dst:
+                neg_pairs.append((src,dst))
+                pair_info[(src,dst)]=TR_info[dst].copy()
         pos_pair={
-            "src":torch.tensor(pos_src,dtype=torch.long),
-            "dst":torch.tensor(pos_dst,dtype=torch.long)
+            "src":torch.tensor([s for s,_ in pos_pairs],dtype=torch.long),
+            "dst":torch.tensor([d for _,d in pos_pairs],dtype=torch.long)
         }
         neg_pair={
-            "src":torch.tensor(neg_src,dtype=torch.long),
-            "dst":torch.tensor(neg_dst,dtype=torch.long)
+            "src":torch.tensor([s for s,_ in neg_pairs],dtype=torch.long),
+            "dst":torch.tensor([d for _,d in neg_pairs],dtype=torch.long)
         }
-        return pos_pair,neg_pair,pair_info
+        return {
+            "pos_pair":pos_pair,
+            "neg_pair":neg_pair,
+            "pair_info":pair_info
+        }

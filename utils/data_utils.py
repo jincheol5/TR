@@ -24,7 +24,7 @@ class DataUtils:
                     header=None,
                     sep=r"\s+",
                     usecols=[0,1,2],
-                    names=["u","i","ts"],
+                    names=["u","i","t"],
                 )
             case "bitcoin-otc"|"bitcoin-alpha":
                 dataset_path=os.path.join(DataUtils.base_path,dataset_name,f"raw_{dataset_name}.csv")
@@ -32,18 +32,18 @@ class DataUtils:
                     dataset_path,
                     header=None,
                     usecols=[0,1,3],
-                    names=["u","i","ts"],
+                    names=["u","i","t"],
                 )
 
         # 결측값 제거
         df=df.dropna(
-            subset=["u","i","ts"]
+            subset=["u","i","t"]
         ).copy()
 
         # 자료형 변환
         df["u"]=df["u"].astype(int)
         df["i"]=df["i"].astype(int)
-        df["ts"]=df["ts"].astype(float)
+        df["t"]=df["t"].astype(float)
 
         # self-loop 제거
         self_loop_mask=df["u"]==df["i"]
@@ -81,18 +81,15 @@ class DataUtils:
 
     @staticmethod
     def preprocess_zenodo_graph(
-        dataset_name:Literal[
-                "enron",
-                "wikipedia",
-                "reddit"
-            ]
+            dataset_name:Literal[
+                    "enron",
+                    "wikipedia",
+                    "reddit"
+                ]
         ):
         """
         """
         bipartite_dataset={
-            "CollegeMsg":False,
-            "bitcoin-otc":False,
-            "bitcoin-alpha":False,
             "enron":False,
             "wikipedia":True,
             "reddit":True
@@ -105,77 +102,66 @@ class DataUtils:
         graph_df=pd.read_csv(
             graph_path,
             index_col=0,
-        )[["u","i","ts","idx"]].copy()
+        )[["u","i","ts","idx"]].rename(
+            columns={"ts": "t"}
+        )
         node_ft=np.load(node_ft_path)
         edge_ft=np.load(edge_ft_path)
 
         ### remove self-loop
-        mask=graph_df["u"]!=graph_df["i"]
-        new_graph_df=graph_df[mask].copy().reset_index(drop=True)
-
-        ### remapping edge id
-        # 기존 idx 기준으로 edge feature 선택
-        old_edge_ids=new_graph_df["idx"].to_numpy()
-        new_edge_ft=edge_ft[old_edge_ids]
-
-        # padding edge feature 다시 추가
-        new_edge_ft=np.vstack(
-            [
-                np.zeros((1,edge_ft.shape[1])),
-                new_edge_ft
-            ]
+        graph_df=(
+            graph_df[graph_df["u"]!=graph_df["i"]]
+            .reset_index(drop=True)
         )
 
-        # idx 재부여
-        new_graph_df["idx"]=np.arange(1,len(new_graph_df)+1)
+        ### remap edge index
+        edge_ft=np.vstack([
+            np.zeros(
+                (1,edge_ft.shape[1]),
+                dtype=edge_ft.dtype
+            ),
+            edge_ft[graph_df["idx"].to_numpy()]
+        ])
+        graph_df["idx"]=np.arange(1,len(graph_df)+1)
 
-        ### remapping node id
-        used_node_ids=np.sort(
-            pd.concat([new_graph_df["u"],new_graph_df["i"]])
-            .unique()
+        # remap node id
+        used_nodes=np.sort(np.unique(graph_df[["u","i"]].to_numpy()))
+        node_map={
+            old_id:new_id
+            for new_id,old_id
+            in enumerate(used_nodes,start=1)
+        }
+        graph_df[["u","i"]]=(
+            graph_df[["u","i"]]
+            .replace(node_map)
             .astype(int)
         )
-        node_id_map={
-            old_id:new_id
-            for new_id,old_id in enumerate(used_node_ids,start=1)
-        }
-        new_graph_df["u"]=new_graph_df["u"].map(node_id_map).astype(int)
-        new_graph_df["i"]=new_graph_df["i"].map(node_id_map).astype(int)
-
-        # Remap node features with the same node order
-        new_node_ft=np.vstack([
-            np.zeros((1,node_ft.shape[1]),dtype=node_ft.dtype),
-            node_ft[used_node_ids]
+        node_ft=np.vstack([
+            np.zeros(
+                (1,node_ft.shape[1]),
+                dtype=node_ft.dtype
+            ),
+            node_ft[used_nodes]
         ])
 
-        # 열 순서 최종 보장
-        new_graph_df=new_graph_df[
-            ["u","i","ts","idx"]
-        ]
-
-        # get n_node, node_dim, edge_dim
-        n_node=max(new_graph_df["u"].max(),new_graph_df["i"].max())
-        node_dim=new_node_ft.shape[1]
-        edge_dim=new_edge_ft.shape[1]
-
         return {
-            "graph_df":new_graph_df,
-            "n_node":n_node,
-            "bipartite":bipartite,
-            "max_u":new_graph_df["u"].max(),
-            "node_dim":node_dim,
-            "edge_dim":edge_dim,
-            "node_ft_np":new_node_ft,
-            "edge_ft_np":new_edge_ft
+            "graph_df": graph_df,
+            "n_node": len(used_nodes),
+            "bipartite": bipartite,
+            "max_u": graph_df["u"].max(),
+            "node_dim": node_ft.shape[1],
+            "edge_dim": edge_ft.shape[1],
+            "node_ft_np": node_ft,
+            "edge_ft_np": edge_ft
         }
 
     @staticmethod
     def preprocess_snap_graph(
-        dataset_name:Literal[
-                "CollegeMsg",
-                "bitcoin-otc",
-                "bitcoin-alpha"
-            ]
+            dataset_name:Literal[
+                    "CollegeMsg",
+                    "bitcoin-otc",
+                    "bitcoin-alpha"
+                ]
         ):
         """
         self-loop 제거된 상태
@@ -186,10 +172,7 @@ class DataUtils:
         bipartite_dataset={
             "CollegeMsg":False,
             "bitcoin-otc":False,
-            "bitcoin-alpha":False,
-            "enron":False,
-            "wikipedia":True,
-            "reddit":True
+            "bitcoin-alpha":False
         }
         bipartite=bipartite_dataset[dataset_name]
         graph_path=os.path.join(DataUtils.base_path,dataset_name,f"{dataset_name}.csv")

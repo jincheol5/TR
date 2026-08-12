@@ -128,36 +128,19 @@ class CTDNE_TR(CTDNE_Base):
                 out_features=1
             )
         )
+
     def forward(self,
-            pos_pair,
-            neg_pair
+            src:torch.Tensor,
+            dst:torch.Tensor
         ):
         """
         Input:
-            pos_tr: dict
-                key: src, dst
-                value: 
-                    src: [B,] 
-                    dst: [B,] 
-            neg_tr: dict
-                key: src, dst
-                value: 
-                    src: [B,] 
-                    dst: [B,] 
+            src: [n_sample,] 
+            dst: [n_sample,] 
         """
-        ### 0. unpack node pair dict
-        pos_src=pos_pair["src"]
-        pos_dst=pos_pair["dst"]
-        neg_src=neg_pair["src"]
-        neg_dst=neg_pair["dst"]
-
-        src=torch.concat([pos_src,neg_src],dim=0) # [2B,]
-        dst=torch.concat([pos_dst,neg_dst],dim=0) # [2B,]
-
         ### 1. current batch에 대한 embedding
         src_ft=self.node_ft(src)
         dst_ft=self.node_ft(dst)
-
         pair_ft=torch.concat([src_ft,dst_ft],dim=-1) # [2B,embed_dim+embed_dim]
         pred_logit=self.decoder(pair_ft) # [2B,1]
         return pred_logit

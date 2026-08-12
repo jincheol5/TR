@@ -2,13 +2,14 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from utils import TrainUtils,Metric
 
 class ModelTrainer:
     @staticmethod
     def train_walk_model(
             model:nn.Module,
             train_loader:DataLoader,
-            val_loader:DataLoader,
+            val_sample_loader:list,
             **kwargs
         ):
         """
@@ -32,7 +33,7 @@ class ModelTrainer:
                     k_list=k_list,
                     L=kwargs["L"],
                     min_points=kwargs["min_points"],
-                    max_walk_len=kwargs["max_walk_len"],
+                    walk_len=kwargs["walk_len"],
                     n_sampling=kwargs["n_sampling"],
                     epoch=kwargs["walk_epoch"],
                     seed=kwargs["seed"]
@@ -65,22 +66,51 @@ class ModelTrainer:
         """
         for epoch in tqdm(range(kwargs["epoch"]),desc=f"Model Training..."):
             model.train()
-            for src,dst,event_t,edge_idx in tqdm(
-                    train_loader,
+            sample_loader=TrainUtils.get_TR_sample_loader(
+                n_sample=kwargs["n_sample"],
+                n_pair=kwargs["n_pair"],
+                max_hop=kwargs["max_hop"],
+                data_loader=train_loader,
+                graph=model.graph
+            )
+            for sample in tqdm(
+                    sample_loader,
                     desc=f"Training epoch: {epoch+1}..."
                 ):
-                src=src.to(device) # [B,]
-                dst=dst.to(device) # [B,]
-                event_t=event_t.to(device) # [B,]
-                edge_idx=edge_idx.to(device) # [B,]
+                src=sample["src"]
+                dst=sample["dst"]
+                label=sample["label"]
+                src=src.to(device)
+                dst=dst.to(device)
+                label=label.to(device)
 
-                # TR sampling
-                query_time=event_t[-1].item()
+                pred_logit=model(
+                    src=src,
+                    dst=dst
+                ) # [n_sample,1]
+                pred_logit=pred_logit.squeeze(-1) # -> [n_sample,]
+
+                ### Loss
+                criterion=nn.BCEWithLogitsLoss()
+                loss=criterion(pred_logit,label)
+
+                ### backward
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            """
+            validate model
+            """
+            ModelTrainer.evaluate_walk_model(
+                model=model,
+                sample_loader=val_sample_loader,
+                **kwargs
+            )
 
     @staticmethod
-    def evaluate_walk(
+    def evaluate_walk_model(
             model:nn.Module,
-            data_loader:DataLoader,
+            sample_loader:list,
             **kwargs
         ):
         """
@@ -93,4 +123,30 @@ class ModelTrainer:
             device=torch.device("cpu")
         model=model.to(device)
         model.eval()
-        model.graph.set_random_seed(kwargs["seed"])
+
+        acc_list=[]
+        with torch.no_grad():
+            for sample in tqdm(
+                    sample_loader,
+                    desc=f"Evaluating..."
+                ):
+                src=sample["src"]
+                dst=sample["dst"]
+                label=sample["label"]
+                src=src.to(device)
+                dst=dst.to(device)
+                label=label.to(device)
+
+                pred_logit=model(
+                    src=src,
+                    dst=dst
+                ) # [n_sample,1]
+                pred_logit=pred_logit.squeeze(-1) # -> [n_sample,]
+
+                ### compute ACC
+                batch_acc=Metric.compute_accuracy(
+                    pred_logit=pred_logit,
+                    label=label
+                )
+                acc_list.append(batch_acc)
+        print(f"ACC: {sum(acc_list)/len(acc_list)}")

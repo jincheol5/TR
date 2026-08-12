@@ -534,7 +534,7 @@ class ATDGEB_Graph(TemporalGraph):
     def get_walks_using_path_tree(self,
             node:int,
             time_interval:tuple[float,float],
-            max_walk_len:int=20,
+            walk_len:int=20,
             n_sampling:int=1
         )->list[list[int]]:
         """
@@ -544,7 +544,7 @@ class ATDGEB_Graph(TemporalGraph):
         Input:
             node: path tree의 root node
             time_interval: walk가 허용되는 시간 구간
-            max_walk_len: 하나의 walk에 포함할 최대 노드 수
+            walk_len: 하나의 walk에 포함할 최대 노드 수
             n_sampling: 각 tree node에서 수행할 최대 LSBS 횟수
         Output:
             walks: list[list[int]], list of walk path
@@ -559,9 +559,9 @@ class ATDGEB_Graph(TemporalGraph):
             raise ValueError(
                 "time_interval의 시작 시간은 종료 시간보다 클 수 없습니다."
             )
-        if max_walk_len<1:
+        if walk_len<1:
             raise ValueError(
-                "max_walk_len은 1 이상이어야 합니다."
+                "walk_len은 1 이상이어야 합니다."
             )
         if n_sampling<1:
             raise ValueError(
@@ -589,7 +589,7 @@ class ATDGEB_Graph(TemporalGraph):
             walk_path=tree_node["walk_path"]
             visited_states=tree_node["visited_states"]
 
-            if len(walk_path)>=max_walk_len:
+            if len(walk_path)>=walk_len:
                 walks.append(walk_path)
                 continue
 
@@ -700,7 +700,7 @@ class ATDGEB_Graph(TemporalGraph):
             k_list:list,
             L:int,
             min_points:int=2,
-            max_walk_len:int=20,
+            walk_len:int=20,
             n_sampling:int=1,
             seed:int=1
         )->list[list[str]]:
@@ -713,7 +713,7 @@ class ATDGEB_Graph(TemporalGraph):
             k_list: community detection에 사용할 k 목록
             L: local structure vector aggregation 반복 횟수
             min_points: DBSCAN core point를 판별할 최소 이웃 수
-            max_walk_len: 하나의 walk에 포함할 최대 노드 수
+            walk_len: 하나의 walk에 포함할 최대 노드 수
             n_sampling: 각 tree node에서 수행할 최대 LSBS 횟수
         Output:
             walks: list[list[str]], list of walk path
@@ -740,7 +740,7 @@ class ATDGEB_Graph(TemporalGraph):
                 node_walks=self.get_walks_using_path_tree(
                     node=node,
                     time_interval=time_interval,
-                    max_walk_len=max_walk_len,
+                    walk_len=walk_len,
                     n_sampling=n_sampling
                 )
                 walks.extend(

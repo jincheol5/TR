@@ -38,6 +38,7 @@ class ModelTrainer:
                     epoch=kwargs["walk_epoch"],
                     seed=kwargs["seed"]
                 )
+        print(f"finish train skip-gram")
 
         """
         Train decoder

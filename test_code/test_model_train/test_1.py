@@ -2,7 +2,9 @@ import argparse
 import torch
 from torch.utils.data import DataLoader
 from utils import DataUtils,TrainUtils,TemporalGraphDataset
-from graph import TemporalGraph
+from graph import TemporalGraph,CTDNE_Graph
+from model import CTDNE_TR
+from model_train import ModelTrainer
 
 """
 << Test >> 
@@ -25,16 +27,26 @@ def test_fn(**kwargs):
                 "walk_epoch":10,
                 "edge_sampling":"uniform",
                 "neighbor_sampling":"uniform",
+                "n_sample":400,
+                "n_pair":10,
+                "max_hop":5,
                 "epoch":10,
                 "lr":0.0005,
                 "seed":1,
                 "optimizer":"adam"
             }
-
             data=DataUtils.preprocess_graph(
                 dataset_name=f"enron"
             )
             graph_df=data["graph_df"]
+            graph=CTDNE_Graph(graph_df=graph_df)
+            graph.set_random_seed(seed=1)
+            model=CTDNE_TR(
+                embed_dim=32,
+                latent_dim=32,
+                window=10,
+                graph=graph
+            )
             train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
             train_dataset=TemporalGraphDataset(df=train_df)
             val_dataset=TemporalGraphDataset(df=val_df)
@@ -42,6 +54,32 @@ def test_fn(**kwargs):
             train_loader=DataLoader(dataset=train_dataset,batch_size=200,shuffle=False)
             val_loader=DataLoader(dataset=val_dataset,batch_size=200,shuffle=False)
             test_loader=DataLoader(dataset=test_dataset,batch_size=200,shuffle=False)
+
+            val_sample_loader=TrainUtils.get_TR_sample_loader(
+                n_sample=400,
+                n_pair=10,
+                max_hop=5,
+                data_loader=val_loader,
+                graph=model.graph
+            )
+            test_sample_loader=TrainUtils.get_TR_sample_loader(
+                n_sample=400,
+                n_pair=10,
+                max_hop=5,
+                data_loader=test_loader,
+                graph=model.graph
+            )
+
+            model=ModelTrainer.train_walk_model(
+                model=model,
+                train_loader=train_loader,
+                val_sample_loader=val_sample_loader,
+                **model_config
+            )
+            ModelTrainer.evaluate_walk_model(
+                model=model,
+                sample_loader=test_sample_loader
+            )
 
 
 if __name__=="__main__":

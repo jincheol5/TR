@@ -20,12 +20,11 @@ class ModelTrainer:
                 model.train_skipgram(
                     walk_len=kwargs["walk_len"],
                     min_walk_len=kwargs["min_walk_len"],
-                    n_context_window=kwargs["n_context_window"],
-                    max_attempt=kwargs["max_attempt"],
+                    n_walk=kwargs["n_walk"],
+                    n_window=kwargs["n_window"],
                     edge_sampling=kwargs["edge_sampling"],
                     neighbor_sampling=kwargs["neighbor_sampling"],
-                    epoch=kwargs["walk_epoch"],
-                    seed=kwargs["seed"]
+                    epoch=kwargs["walk_epoch"]
                 )
             case "ATDGEB":
                 k_list=[2,4,6,8,10]

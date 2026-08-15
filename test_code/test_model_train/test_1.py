@@ -20,10 +20,10 @@ def test_fn(**kwargs):
             """
             model_config={
                 "model_name":"CTDNE",
-                "walk_len":10,
+                "walk_len":5,
                 "min_walk_len":3,
-                "n_context_window":100,
-                "max_attempt":100,
+                "n_walk":10,
+                "n_window":100,
                 "walk_epoch":10,
                 "edge_sampling":"uniform",
                 "neighbor_sampling":"uniform",
@@ -32,7 +32,6 @@ def test_fn(**kwargs):
                 "max_hop":5,
                 "epoch":10,
                 "lr":0.0005,
-                "seed":1,
                 "optimizer":"adam"
             }
             data=DataUtils.preprocess_graph(
@@ -44,7 +43,7 @@ def test_fn(**kwargs):
             model=CTDNE_TR(
                 embed_dim=32,
                 latent_dim=32,
-                window=10,
+                window_size=3,
                 graph=graph
             )
             train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
@@ -55,6 +54,10 @@ def test_fn(**kwargs):
             val_loader=DataLoader(dataset=val_dataset,batch_size=200,shuffle=False)
             test_loader=DataLoader(dataset=test_dataset,batch_size=200,shuffle=False)
 
+            """
+            sample 생성 시 너무 오랜 시간 소모 -> 확인 필요
+            """
+
             val_sample_loader=TrainUtils.get_TR_sample_loader(
                 n_sample=400,
                 n_pair=10,
@@ -62,9 +65,9 @@ def test_fn(**kwargs):
                 data_loader=val_loader,
                 graph=model.graph
             )
+
             test_sample_loader=TrainUtils.get_TR_sample_loader(
                 n_sample=400,
-                n_pair=10,
                 max_hop=5,
                 data_loader=test_loader,
                 graph=model.graph

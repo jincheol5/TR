@@ -1,27 +1,20 @@
 import argparse
 import torch
 from utils import DataUtils
-from graph import TemporalGraph,CTDNE_Graph
+from graph import CTDNE_Graph
+from module import SkipGram
 
 """
 << Test >> 
-data.temporal_graph
+
 """
 def test_fn(**kwargs):
     match kwargs['test_num']:
         case 1:
             """
-            Test. TemporalGraph
+            Test. skip_gram.SkipGram
             """
-            dataset=DataUtils.preprocess_graph(dataset_name="enron")
-            graph_df=dataset["graph_df"]
-            graph=TemporalGraph(graph_df=graph_df)
-            graph.set_random_seed(seed=1)
-
-        case 2:
-            """
-            Test. CTDNE_Graph.generate_walks
-            """
+            ### data
             dataset=DataUtils.preprocess_graph(dataset_name="enron")
             graph_df=dataset["graph_df"]
             graph=CTDNE_Graph(graph_df=graph_df)
@@ -35,7 +28,15 @@ def test_fn(**kwargs):
             n_window=int(n_walk*n_node*(walk_len-min_walk_len+1))
             edge_sampling=f"uniform"
             neighbor_sampling=f"uniform"
+            epoch=10
 
+            ### model
+            skip_gram=SkipGram(
+                vector_size=128,
+                window_size=min_walk_len
+            )
+
+            ### Walk 생성
             walks=graph.generate_walks(
                 walk_len=walk_len,
                 min_walk_len=min_walk_len,
@@ -44,7 +45,19 @@ def test_fn(**kwargs):
                 edge_sampling=edge_sampling,
                 neighbor_sampling=neighbor_sampling
             )
-            print(len(walks))
+    
+            ### vocabulary 생성
+            all_nodes=[[str(node)] for node in range(0,n_node+1)]
+            vocab_corpus=walks+all_nodes
+            skip_gram.build_vocab(vocab_corpus)
+    
+            ### Skip-Gram 학습
+            skip_gram.train(
+                corpus_iterable=walks,
+                total_examples=skip_gram.corpus_count,
+                epochs=epoch
+            )
+            print(f"Skip-Gram training is finished!")
 
 if __name__=="__main__":
     """

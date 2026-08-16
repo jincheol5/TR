@@ -9,81 +9,149 @@ from model_train import ModelTrainer
 """
 << Test >> 
 model_train.ModelTrainer
+train_utils.TrainUtils
 """
 def test_fn(**kwargs):
     match kwargs['test_num']:
         case 1:
             """
-            Test.
-            model_train.ModelTrainer.train_TR
-            Model: CTDNE
+            Test. TrainUtils.get_sample_loader
             """
-            model_config={
-                "model_name":"CTDNE",
-                "walk_len":5,
-                "min_walk_len":3,
-                "n_walk":10,
-                "n_window":100,
-                "walk_epoch":10,
-                "edge_sampling":"uniform",
-                "neighbor_sampling":"uniform",
-                "n_sample":400,
-                "n_pair":10,
-                "max_hop":5,
-                "epoch":10,
-                "lr":0.0005,
-                "optimizer":"adam"
-            }
-            data=DataUtils.preprocess_graph(
-                dataset_name=f"enron"
-            )
+            data=DataUtils.preprocess_graph(dataset_name="enron")
             graph_df=data["graph_df"]
             graph=CTDNE_Graph(graph_df=graph_df)
             graph.set_random_seed(seed=1)
-            model=CTDNE_TR(
-                embed_dim=32,
-                latent_dim=32,
-                window_size=3,
-                graph=graph
-            )
+
             train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
             train_dataset=TemporalGraphDataset(df=train_df)
             val_dataset=TemporalGraphDataset(df=val_df)
             test_dataset=TemporalGraphDataset(df=test_df)
+
             train_loader=DataLoader(dataset=train_dataset,batch_size=200,shuffle=False)
             val_loader=DataLoader(dataset=val_dataset,batch_size=200,shuffle=False)
             test_loader=DataLoader(dataset=test_dataset,batch_size=200,shuffle=False)
 
-            """
-            sample 생성 시 너무 오랜 시간 소모 -> 확인 필요
-            """
-
-            val_sample_loader=TrainUtils.get_TR_sample_loader(
-                n_sample=400,
+            sample_laoder=TrainUtils.get_sample_loader(
+                n_sample=100,
                 n_pair=10,
                 max_hop=5,
-                data_loader=val_loader,
-                graph=model.graph
-            )
-
-            test_sample_loader=TrainUtils.get_TR_sample_loader(
-                n_sample=400,
-                max_hop=5,
                 data_loader=test_loader,
-                graph=model.graph
+                graph=graph
             )
 
+            print(len(sample_laoder))
+
+        case 2:
+            """
+            Test. ModelTrainer.train_TR
+            
+            Model: CTDNE
+            """
+            model_name=f"CTDNE"
+            seed=1
+
+            data=DataUtils.preprocess_graph(dataset_name=f"enron")
+            graph_df=data["graph_df"]
+            graph=CTDNE_Graph(graph_df=graph_df)
+            graph.set_random_seed(seed=seed)
+            n_node=graph.get_num_node()
+
+            ### 하이퍼 파라미터
+            # random walk 관련 파라미터
+            walk_len=5
+            min_walk_len=2
+            n_walk=10
+            n_window=int(n_walk*n_node*(walk_len-min_walk_len+1))
+            window_size=2 # min_walk_len과 같아야 한다 
+            edge_sampling=f"linear"
+            neighbor_sampling=f"linear"
+            walk_epoch=5
+
+            # TR sample 관련 파라미터
+            n_sample=100
+            n_pair=10
+            max_hop=5 # walk_len과 동일해야 한다
+
+            # 모델 학습 관련
+            embed_dim=32
+            latent_dim=32
+            epoch=100
+            lr=0.0005
+            optimizer=f"adam"
+            early_stop=True
+            patience=5
+
+            ### model config
+            model_config={
+                "model_name":model_name,
+                "walk_len":walk_len,
+                "min_walk_len":min_walk_len,
+                "n_walk":n_walk,
+                "n_window":n_window,
+                "window_size":window_size,
+                "edge_sampling":edge_sampling,
+                "neighbor_sampling":neighbor_sampling,
+                "walk_epoch":walk_epoch,
+                "n_sample":n_sample,
+                "n_pair":n_pair,
+                "max_hop":max_hop,
+                "embed_dim":embed_dim,
+                "latent_dim":latent_dim,
+                "epoch":epoch,
+                "lr":lr,
+                "optimizer":optimizer,
+                "early_stop":early_stop,
+                "patience":patience
+            }
+
+            ### set data_loader, sample_loader
+            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
+            train_dataset=TemporalGraphDataset(df=train_df)
+            val_dataset=TemporalGraphDataset(df=val_df)
+            test_dataset=TemporalGraphDataset(df=test_df)
+
+            train_loader=DataLoader(dataset=train_dataset,batch_size=200,shuffle=False)
+            val_loader=DataLoader(dataset=val_dataset,batch_size=200,shuffle=False)
+            test_loader=DataLoader(dataset=test_dataset,batch_size=200,shuffle=False)
+
+            val_sample_loader=TrainUtils.get_sample_loader(
+                n_sample=n_sample,
+                n_pair=n_pair,
+                max_hop=max_hop,
+                data_loader=val_loader,
+                graph=graph
+            )
+            print(f"Finish to get val_sample_loader!")
+            TrainUtils.check_sample_loader(sample_loader=val_sample_loader)
+
+            test_sample_loader=TrainUtils.get_sample_loader(
+                n_sample=n_sample,
+                n_pair=n_pair,
+                max_hop=max_hop,
+                data_loader=test_loader,
+                graph=graph
+            )
+            print(f"Finish to get test_sample_loader!")
+            TrainUtils.check_sample_loader(sample_loader=test_sample_loader)
+
+            ### set model and train
+            model=CTDNE_TR(
+                embed_dim=embed_dim,
+                latent_dim=latent_dim,
+                window_size=window_size,
+                graph=graph
+            )
             model=ModelTrainer.train_walk_model(
                 model=model,
                 train_loader=train_loader,
                 val_sample_loader=val_sample_loader,
                 **model_config
             )
-            ModelTrainer.evaluate_walk_model(
+            acc=ModelTrainer.evaluate_walk_model(
                 model=model,
                 sample_loader=test_sample_loader
             )
-
+            print(f"Evaluate ACC: {acc}")
 
 if __name__=="__main__":
     """

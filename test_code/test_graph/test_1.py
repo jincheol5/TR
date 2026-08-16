@@ -11,14 +11,34 @@ def test_fn(**kwargs):
     match kwargs['test_num']:
         case 1:
             """
-            Test. TemporalGraph
+            Test. TemporalGraph.compute_TR
             """
             dataset=DataUtils.preprocess_graph(dataset_name="enron")
             graph_df=dataset["graph_df"]
             graph=TemporalGraph(graph_df=graph_df)
             graph.set_random_seed(seed=1)
+            TR_info=graph.compute_TR(
+                source=1,
+                max_hop=5
+            )
+            print(graph.get_num_node())
 
         case 2:
+            """
+            Test. TemporalGraph.random_TR_sampling
+            """
+            dataset=DataUtils.preprocess_graph(dataset_name="enron")
+            graph_df=dataset["graph_df"]
+            graph=TemporalGraph(graph_df=graph_df)
+            graph.set_random_seed(seed=1)
+            result=graph.random_TR_sampling(
+                n_sample=100,
+                n_pair=10,
+                max_hop=5
+            )
+            print(result["src"].size())
+
+        case 3:
             """
             Test. CTDNE_Graph.generate_walks
             """

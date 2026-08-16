@@ -8,6 +8,9 @@ from .temporal_graph import TemporalGraph
 from utils import SamplingUtils
 
 class CTDNE_Graph(TemporalGraph):
+    """
+    exponential 방법은 CTDNE 논문에서 제안되었지만 실험에서 사용 안함 
+    """
     def __init__(self,
             graph_df:pd.DataFrame,
             bipartite:bool=False
@@ -246,26 +249,3 @@ class CTDNE_Graph(TemporalGraph):
             window_count+=(len(walk)-min_walk_len+1)
         return walks
 
-        # while window_count<n_window:
-        #     ### 1. 시작 edge event 선택
-        #     src,dst,t,_=self.select_start_temporal_edge(
-        #         sampling_method=edge_sampling
-        #     )
-        #     ### 2. n_walk번 walk 생성, skip-gram 학습을 위해 node_id=str
-        #     for _ in range(n_walk):
-        #         walk=self.temporal_random_walk(
-        #             source=dst,
-        #             start_t=t,
-        #             walk_len=walk_len-1,
-        #             neighbor_sampling=neighbor_sampling,
-        #         )
-        #         walk=[str(src)]+walk
-
-        #         # walk가 최소 길이를 만족하지 못하면 폐기, 만족하면 walks에 추가
-        #         if len(walk)<min_walk_len:
-        #             continue
-        #         walks.append(walk)
-
-        #     ### 4. 해당 walk_seq가 생성하는 temporal context window 개수 계산 후 종료 조건 확인
-        #     window_count+=(len(walk)-min_walk_len+1)
-        # return walks

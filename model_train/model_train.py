@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from utils import TrainUtils,Metric
+from utils import TrainUtils,Metric,EarlyStopper
 
 class ModelTrainer:
     @staticmethod
@@ -13,7 +13,13 @@ class ModelTrainer:
             **kwargs
         ):
         """
-        Train skip-gram
+        Set Early Stopper
+        """
+        if kwargs["early_stop"]:
+            early_stop=EarlyStopper(patience=kwargs["patience"])
+
+        """
+        Train Skip-Gram
         """
         match kwargs["model_name"]:
             case "CTDNE":
@@ -26,21 +32,10 @@ class ModelTrainer:
                     neighbor_sampling=kwargs["neighbor_sampling"],
                     epoch=kwargs["walk_epoch"]
                 )
-            case "ATDGEB":
-                k_list=[2,4,6,8,10]
-                model.train_skipgram(
-                    k_list=k_list,
-                    L=kwargs["L"],
-                    min_points=kwargs["min_points"],
-                    walk_len=kwargs["walk_len"],
-                    n_sampling=kwargs["n_sampling"],
-                    epoch=kwargs["walk_epoch"],
-                    seed=kwargs["seed"]
-                )
-        print(f"finish train skip-gram")
+        print(f"Finish to train Skip-Gram")
 
         """
-        Train decoder
+        Train Decoder
         """
         if torch.cuda.is_available():
             device=torch.device("cuda")
@@ -62,17 +57,18 @@ class ModelTrainer:
             )
 
         """
-        model train
+        Model Train
         """
         for epoch in tqdm(range(kwargs["epoch"]),desc=f"Model Training..."):
             model.train()
-            sample_loader=TrainUtils.get_TR_sample_loader(
+            sample_loader=TrainUtils.get_sample_loader(
                 n_sample=kwargs["n_sample"],
                 n_pair=kwargs["n_pair"],
                 max_hop=kwargs["max_hop"],
                 data_loader=train_loader,
                 graph=model.graph
             )
+            TrainUtils.check_sample_loader(sample_loader=sample_loader)
             for sample in tqdm(
                     sample_loader,
                     desc=f"Training epoch: {epoch+1}..."
@@ -98,14 +94,74 @@ class ModelTrainer:
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+
             """
-            validate model
+            Validate Model
             """
-            ModelTrainer.evaluate_walk_model(
+            acc=ModelTrainer.evaluate_walk_model(
                 model=model,
                 sample_loader=val_sample_loader,
                 **kwargs
             )
+            print(f"Validate ACC: {acc}")
+
+            """
+            Check Early Stop
+            """
+            val_loss=ModelTrainer.compute_validate_loss(
+                model=model,
+                val_sample_loader=val_sample_loader
+            )
+            print(f"{epoch+1} epoch Validate Loss: {val_loss}")
+            if kwargs["early_stop"]:
+                pre_model=early_stop(
+                    val_loss=val_loss,
+                    model=model
+                )
+                if early_stop.early_stop:
+                    model=pre_model
+                    print(f"Early Stop in epoch {epoch+1}")
+                    break
+        return model
+
+    @staticmethod
+    def compute_validate_loss(
+            model,
+            val_sample_loader:list
+        ):
+        if torch.cuda.is_available():
+            device=torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device=torch.device("mps")
+        else:
+            device=torch.device("cpu")
+        model.to(device)
+        model.eval()
+
+        """
+        compute validate loss
+        """
+        loss_list=[]
+        with torch.no_grad():
+            for sample in tqdm(val_sample_loader,desc=f"Compute Val_Loss..."):
+                src=sample["src"]
+                dst=sample["dst"]
+                label=sample["label"]
+                src=src.to(device)
+                dst=dst.to(device)
+                label=label.to(device)
+
+                pred_logit=model(
+                    src=src,
+                    dst=dst
+                ) # [n_sample,1]
+                pred_logit=pred_logit.squeeze(-1) # -> [n_sample,]
+
+                ### Loss
+                criterion=nn.BCEWithLogitsLoss()
+                loss=criterion(pred_logit,label)
+                loss_list.append(loss)
+        return torch.stack(loss_list).mean().item()
 
     @staticmethod
     def evaluate_walk_model(
@@ -149,4 +205,5 @@ class ModelTrainer:
                     label=label
                 )
                 acc_list.append(batch_acc)
-        print(f"ACC: {sum(acc_list)/len(acc_list)}")
+        acc=sum(acc_list)/len(acc_list)
+        return acc

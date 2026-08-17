@@ -459,6 +459,7 @@ class ATDGEB_Graph(TemporalGraph):
             node:int,
             walk_path:list[int],
             time_interval:tuple[float,float],
+            start_inclusive:bool=True,
             excluded_neighbors:set[int]|None=None
         )->int|None:
         """
@@ -468,6 +469,7 @@ class ATDGEB_Graph(TemporalGraph):
             node: 현재 노드
             walk_path: 현재까지 생성된 walk path
             time_interval: walk가 허용되는 시간 구간
+            start_inclusive: time_interval의 시작 시각 포함 여부
             excluded_neighbors: 현재 tree node에서 이미 샘플된 이웃
         Output:
             sampled_neighbor: 선택된 다음 이웃 노드, 시간 구간 안에 방문 가능한 이웃이 없으면 None
@@ -503,7 +505,12 @@ class ATDGEB_Graph(TemporalGraph):
                 self.train_adj_t.get(node,[])
             ):
             if (
-                start_time<=timestamp<=end_time
+                (
+                    start_time<=timestamp
+                    if start_inclusive
+                    else start_time<timestamp
+                )
+                and timestamp<=end_time
                 and neighbor not in excluded_neighbors
                 and neighbor not in candidate_set
             ):
@@ -650,7 +657,12 @@ class ATDGEB_Graph(TemporalGraph):
                     self.train_adj.get(current_node,[]),
                     self.train_adj_t.get(current_node,[])
                 ):
-                if candidate_start<=timestamp<=end_time:
+                is_after_start=(
+                    candidate_start<=timestamp
+                    if arrival_time is None
+                    else candidate_start<timestamp
+                )
+                if is_after_start and timestamp<=end_time:
                     interval_neighbors.add(neighbor)
                     if (neighbor,timestamp) in visited_states:
                         continue
@@ -684,6 +696,9 @@ class ATDGEB_Graph(TemporalGraph):
                         candidate_start,
                         end_time
                     ),
+                    # root의 첫 edge는 interval start를 포함하고,
+                    # 이후 edge는 직전 arrival time보다 엄격히 커야 한다.
+                    start_inclusive=arrival_time is None,
                     # Algorithm 3의 한 tree node에서 같은 child를
                     # 중복 생성하지 않도록 비복원 샘플링한다.
                     # 이미 방문한 time-expanded state만 가진 이웃도

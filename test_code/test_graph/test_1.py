@@ -1,7 +1,7 @@
 import argparse
 import torch
 from utils import DataUtils
-from graph import TemporalGraph,CTDNE_Graph
+from graph import TemporalGraph,CTDNE_Graph,ATDGEB_Graph
 
 """
 << Test >> 
@@ -65,6 +65,31 @@ def test_fn(**kwargs):
                 neighbor_sampling=neighbor_sampling
             )
             print(len(walks))
+        case 4:
+            """
+            Test. ATDGEB_Graph.generate_walks
+            """
+            dataset=DataUtils.preprocess_graph(dataset_name="enron")
+            graph_df=dataset["graph_df"]
+            graph=ATDGEB_Graph(graph_df=graph_df)
+            graph.set_random_seed(seed=1)
+
+            # 하이퍼 파라미터
+            k_list=[2,4,6,8,10]
+            n_aggr=2
+            min_points=3
+            walk_len=5
+            n_lsbs=3
+
+            walks=graph.generate_walks(
+                k_list=k_list,
+                n_aggr=n_aggr,
+                min_points=min_points,
+                walk_len=walk_len,
+                n_lsbs=n_lsbs
+            )
+            print(walks)
+
 
 if __name__=="__main__":
     """

@@ -197,12 +197,12 @@ class ATDGEB_Graph(TemporalGraph):
         return local_struct_vec
 
     def aggregate_local_struct_vec(self,
-            L:int
+            n_aggr:int
         )->list[np.ndarray]:
         """
         Input:
             init_stru: init local structure vector list
-            L: aggregate 반복 횟수
+            n_aggr: aggregate 반복 횟수
         Output:
             stru: aggregated local structure vector list
         """
@@ -221,7 +221,7 @@ class ATDGEB_Graph(TemporalGraph):
         # node 0은 padding node
         stru[0].fill(0.0)
 
-        for _ in range(L):
+        for _ in range(n_aggr):
             # 현재 layer 계산에는 이전 layer의 벡터만 사용
             prev_stru=stru
             next_stru=[
@@ -466,7 +466,7 @@ class ATDGEB_Graph(TemporalGraph):
         # 주어진 시간 구간에 접촉한 이웃만 선택한다.
         candidate_neighbors=[] # 실제 샘플링에 사용할 이웃 목록
         candidate_set=set() # 같은 이웃이 중복으로 추가되는 것을 방지하는 집합
-        for neighbor,timestamp in zip(
+        for (neighbor,_),timestamp in zip(
                 self.adj.get(node,[]),
                 self.adj_t.get(node,[])
             ):
@@ -535,7 +535,7 @@ class ATDGEB_Graph(TemporalGraph):
             node:int,
             time_interval:tuple[float,float],
             walk_len:int=20,
-            n_sampling:int=1
+            n_lsbs:int=1
         )->list[list[int]]:
         """
         논문의 Algorithm 3 PathTree에 따라 주어진 시간 구간에서
@@ -545,7 +545,7 @@ class ATDGEB_Graph(TemporalGraph):
             node: path tree의 root node
             time_interval: walk가 허용되는 시간 구간
             walk_len: 하나의 walk에 포함할 최대 노드 수
-            n_sampling: 각 tree node에서 수행할 최대 LSBS 횟수
+            n_path: 각 tree node에서 수행할 최대 LSBS 횟수
         Output:
             walks: list[list[int]], list of walk path
         """
@@ -563,9 +563,9 @@ class ATDGEB_Graph(TemporalGraph):
             raise ValueError(
                 "walk_len은 1 이상이어야 합니다."
             )
-        if n_sampling<1:
+        if n_lsbs<1:
             raise ValueError(
-                "n_sampling 1 이상이어야 합니다."
+                "n_lsbs 1 이상이어야 합니다."
             )
 
         # 각 queue item은 논문의 tree node instance에 해당한다.
@@ -612,7 +612,7 @@ class ATDGEB_Graph(TemporalGraph):
             # 시간 도달성을 만족하는 서로 다른 이웃과 각 이웃으로
             # 이동할 수 있는 가장 이른 arrival time을 구한다.
             eligible_arrival_times={}
-            for neighbor,timestamp in zip(
+            for (neighbor,_),timestamp in zip(
                     self.adj.get(current_node,[]),
                     self.adj_t.get(current_node,[])
                 ):
@@ -632,14 +632,14 @@ class ATDGEB_Graph(TemporalGraph):
 
             # 모든 유효 이웃을 매 단계 확장하면 path tree의 크기가
             # 지수적으로 증가하므로 지정한 횟수까지만 LSBS를 수행한다.
-            n_sampling=min(
+            n_lsbs=min(
                 len(eligible_arrival_times),
-                n_sampling
+                n_lsbs
             )
             sampled_children=set()
             child_created=False
 
-            for _ in range(n_sampling):
+            for _ in range(n_lsbs):
                 sampled_neighbor=self.local_structure_biased_sampling(
                     node=current_node,
                     walk_path=walk_path,
@@ -693,16 +693,14 @@ class ATDGEB_Graph(TemporalGraph):
             # 경우에도 현재 tree node는 leaf이다.
             if not child_created:
                 walks.append(walk_path)
-
         return walks
 
     def generate_walks(self,
             k_list:list,
-            L:int,
+            n_aggr:int,
             min_points:int=2,
             walk_len:int=20,
-            n_sampling:int=1,
-            seed:int=1
+            n_lsbs:int=1
         )->list[list[str]]:
         """
         Local structure vector와 visit probability를 계산한 뒤,
@@ -711,21 +709,19 @@ class ATDGEB_Graph(TemporalGraph):
 
         Input:
             k_list: community detection에 사용할 k 목록
-            L: local structure vector aggregation 반복 횟수
-            min_points: DBSCAN core point를 판별할 최소 이웃 수
+            n_aggr: local structure vector aggregation 반복 횟수
+            min_points: Adaptive Walk Strategy를 위한 DBSCAN core point를 판별할 최소 이웃 수
             walk_len: 하나의 walk에 포함할 최대 노드 수
-            n_sampling: 각 tree node에서 수행할 최대 LSBS 횟수
+            n_lsbs: 각 tree node에서 수행할 최대 LSBS 횟수
         Output:
             walks: list[list[str]], list of walk path
         """
-        if L<0:
+        if n_aggr<0:
             raise ValueError(
-                "L은 0 이상이어야 합니다."
+                "n_aggr은 0 이상이어야 합니다."
             )
-        self.set_random_seed(seed=seed)
-
         self.generate_init_local_struct_vec(k_list=k_list)
-        self.aggregate_local_struct_vec(L=L)
+        self.aggregate_local_struct_vec(n_aggr=n_aggr)
         self.compute_visit_prob()
 
         walks=[]
@@ -741,7 +737,7 @@ class ATDGEB_Graph(TemporalGraph):
                     node=node,
                     time_interval=time_interval,
                     walk_len=walk_len,
-                    n_sampling=n_sampling
+                    n_lsbs=n_lsbs
                 )
                 walks.extend(
                     [

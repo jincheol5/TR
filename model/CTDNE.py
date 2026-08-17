@@ -68,7 +68,7 @@ class CTDNE_Base(nn.Module):
                 "linear",
                 "exponential"
             ]="uniform",
-            epoch:int=1
+            epoch:int=5
         ):
         """
         Input:

@@ -8,8 +8,8 @@ class ModelTrainer:
     @staticmethod
     def train_walk_model(
             model:nn.Module,
-            train_loader:DataLoader,
-            val_sample_loader:list,
+            train_sample_loader:DataLoader,
+            val_sample_loader:DataLoader,
             **kwargs
         ):
         """
@@ -30,6 +30,15 @@ class ModelTrainer:
                     n_window=kwargs["n_window"],
                     edge_sampling=kwargs["edge_sampling"],
                     neighbor_sampling=kwargs["neighbor_sampling"],
+                    epoch=kwargs["walk_epoch"]
+                )
+            case "ATDGEB":
+                model.train_skipgram(
+                    k_list=kwargs["k_list"],
+                    n_aggr=kwargs["n_aggr"],
+                    min_points=kwargs["min_points"],
+                    walk_len=kwargs["walk_len"],
+                    n_lsbs=kwargs["n_lsbs"],
                     epoch=kwargs["walk_epoch"]
                 )
         print(f"Finish to train Skip-Gram")
@@ -61,21 +70,22 @@ class ModelTrainer:
         """
         for epoch in tqdm(range(kwargs["epoch"]),desc=f"Model Training..."):
             model.train()
-            sample_loader=TrainUtils.get_sample_loader(
-                n_sample=kwargs["n_sample"],
-                n_pair=kwargs["n_pair"],
-                max_hop=kwargs["max_hop"],
-                data_loader=train_loader,
-                graph=model.graph
-            )
-            TrainUtils.check_sample_loader(sample_loader=sample_loader)
             for sample in tqdm(
-                    sample_loader,
+                    train_sample_loader,
                     desc=f"Training epoch: {epoch+1}..."
                 ):
-                src=sample["src"]
-                dst=sample["dst"]
-                label=sample["label"]
+                src=torch.cat([
+                    sample["pos_src"],
+                    sample["neg_src"]
+                ])
+                dst=torch.cat([
+                    sample["pos_dst"],
+                    sample["neg_dst"]
+                ])
+                label=torch.cat([
+                    sample["pos_label"],
+                    sample["neg_label"]
+                ]).float()
                 src=src.to(device)
                 dst=dst.to(device)
                 label=label.to(device)
@@ -144,9 +154,18 @@ class ModelTrainer:
         loss_list=[]
         with torch.no_grad():
             for sample in tqdm(val_sample_loader,desc=f"Compute Val_Loss..."):
-                src=sample["src"]
-                dst=sample["dst"]
-                label=sample["label"]
+                src=torch.cat([
+                    sample["pos_src"],
+                    sample["neg_src"]
+                ])
+                dst=torch.cat([
+                    sample["pos_dst"],
+                    sample["neg_dst"]
+                ])
+                label=torch.cat([
+                    sample["pos_label"],
+                    sample["neg_label"]
+                ]).float()
                 src=src.to(device)
                 dst=dst.to(device)
                 label=label.to(device)
@@ -186,9 +205,18 @@ class ModelTrainer:
                     sample_loader,
                     desc=f"Evaluating..."
                 ):
-                src=sample["src"]
-                dst=sample["dst"]
-                label=sample["label"]
+                src=torch.cat([
+                    sample["pos_src"],
+                    sample["neg_src"]
+                ])
+                dst=torch.cat([
+                    sample["pos_dst"],
+                    sample["neg_dst"]
+                ])
+                label=torch.cat([
+                    sample["pos_label"],
+                    sample["neg_label"]
+                ]).float()
                 src=src.to(device)
                 dst=dst.to(device)
                 label=label.to(device)

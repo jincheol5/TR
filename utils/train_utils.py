@@ -18,6 +18,69 @@ class TemporalGraphDataset(Dataset):
     def __getitem__(self,idx):
         return self.src[idx],self.dst[idx],self.t[idx],self.edge[idx]
 
+class TRDataset(Dataset):
+    """
+    pos/neg pair 수가 다를 경우 작은 쪽의 수로 맞춰짐
+
+    Input:
+        sample: {
+            "src": [N,] long tensor,
+            "dst": [N,] long tensor,
+            "label": [N,] tensor,
+            "pos_mask": [N,] bool tensor,
+            "pair_info": list
+        }
+    Return:
+        각 item은 positive 1개, negative 1개로 구성
+    """
+    def __init__(self,sample:dict):
+        pos_mask=sample["pos_mask"]
+        neg_mask=~pos_mask
+
+        self.pos_src=sample["src"][pos_mask]
+        self.pos_dst=sample["dst"][pos_mask]
+        self.pos_label=sample["label"][pos_mask]
+        self.pos_info=[
+            info
+            for info,is_pos in zip(
+                sample["pair_info"],
+                pos_mask.tolist()
+            )
+            if is_pos
+        ]
+
+        self.neg_src=sample["src"][neg_mask]
+        self.neg_dst=sample["dst"][neg_mask]
+        self.neg_label=sample["label"][neg_mask]
+        self.neg_info=[
+            info
+            for info,is_pos in zip(
+                sample["pair_info"],
+                pos_mask.tolist()
+            )
+            if not is_pos
+        ]
+
+        self.n_sample=min(
+            len(self.pos_src),
+            len(self.neg_src)
+        )
+
+    def __len__(self):
+        return self.n_sample
+
+    def __getitem__(self,idx):
+        return {
+            "pos_src":self.pos_src[idx],
+            "pos_dst":self.pos_dst[idx],
+            "pos_label":self.pos_label[idx],
+            "pos_info":self.pos_info[idx],
+            "neg_src":self.neg_src[idx],
+            "neg_dst":self.neg_dst[idx],
+            "neg_label":self.neg_label[idx],
+            "neg_info":self.neg_info[idx],
+        }
+
 class TrainUtils:
     @staticmethod
     def split_graph_df(
@@ -42,46 +105,6 @@ class TrainUtils:
         val_df=df.iloc[train_end:val_end].reset_index(drop=True)
         test_df=df.iloc[val_end:].reset_index(drop=True)
         return train_df,val_df,test_df
-
-    @staticmethod
-    def get_sample_loader(
-            n_sample:int,
-            n_pair:int,
-            max_hop:int|None,
-            data_loader:DataLoader,
-            graph:TemporalGraph
-        ):
-        """
-        Return:
-            sample_loader
-        """
-        sample_loader=[]
-        for _,_,event_t,_ in tqdm(data_loader,desc=f"Compute TR sample..."):
-            query_time=event_t[-1].item()
-            sample=graph.random_TR_sampling(
-                n_sample=n_sample,
-                n_pair=n_pair,
-                query_time=query_time,
-                max_hop=max_hop
-            )
-            sample_loader.append(sample)
-        return sample_loader
-
-    @staticmethod
-    def check_sample_loader(sample_loader:list):
-        pos_counts=[]
-        neg_counts=[]
-        for sample in sample_loader:
-            label=sample["label"]
-            pos_counts.append((label==1).sum().item())
-            neg_counts.append((label==0).sum().item())
-        avg_pos=sum(pos_counts)/len(pos_counts)
-        avg_neg=sum(neg_counts)/len(neg_counts)
-        print(
-            f"Avg pos: {avg_pos:.2f}, "
-            f"Avg neg: {avg_neg:.2f}, "
-            f"Avg total: {avg_pos+avg_neg:.2f}"
-        )
 
 class EarlyStopper:
     def __init__(self,

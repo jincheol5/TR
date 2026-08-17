@@ -458,7 +458,8 @@ class ATDGEB_Graph(TemporalGraph):
     def local_structure_biased_sampling(self,
             node:int,
             walk_path:list[int],
-            time_interval:tuple[float,float]
+            time_interval:tuple[float,float],
+            excluded_neighbors:set[int]|None=None
         )->int|None:
         """
         Local Structure Biased Sampling (LSBS)
@@ -467,6 +468,7 @@ class ATDGEB_Graph(TemporalGraph):
             node: 현재 노드
             walk_path: 현재까지 생성된 walk path
             time_interval: walk가 허용되는 시간 구간
+            excluded_neighbors: 현재 tree node에서 이미 샘플된 이웃
         Output:
             sampled_neighbor: 선택된 다음 이웃 노드, 시간 구간 안에 방문 가능한 이웃이 없으면 None
         """
@@ -486,6 +488,11 @@ class ATDGEB_Graph(TemporalGraph):
             raise ValueError(
                 "walk_path의 마지막 노드는 현재 node와 같아야 합니다."
             )
+        excluded_neighbors=(
+            set()
+            if excluded_neighbors is None
+            else excluded_neighbors
+        )
 
         # 동일한 이웃과 여러 번 접촉했더라도 sampling 후보에는 한 번만 포함한다.
         # 주어진 시간 구간에 접촉한 이웃만 선택한다.
@@ -497,6 +504,7 @@ class ATDGEB_Graph(TemporalGraph):
             ):
             if (
                 start_time<=timestamp<=end_time
+                and neighbor not in excluded_neighbors
                 and neighbor not in candidate_set
             ):
                 candidate_neighbors.append(neighbor)
@@ -637,11 +645,15 @@ class ATDGEB_Graph(TemporalGraph):
             # 시간 도달성을 만족하는 서로 다른 이웃과 각 이웃으로
             # 이동할 수 있는 가장 이른 arrival time을 구한다.
             eligible_arrival_times={}
+            interval_neighbors=set()
             for (neighbor,_),timestamp in zip(
                     self.train_adj.get(current_node,[]),
                     self.train_adj_t.get(current_node,[])
                 ):
                 if candidate_start<=timestamp<=end_time:
+                    interval_neighbors.add(neighbor)
+                    if (neighbor,timestamp) in visited_states:
+                        continue
                     previous_timestamp=eligible_arrival_times.get(
                         neighbor
                     )
@@ -657,27 +669,35 @@ class ATDGEB_Graph(TemporalGraph):
 
             # 모든 유효 이웃을 매 단계 확장하면 path tree의 크기가
             # 지수적으로 증가하므로 지정한 횟수까지만 LSBS를 수행한다.
-            n_lsbs=min(
+            n_current_lsbs=min(
                 len(eligible_arrival_times),
                 n_lsbs
             )
             sampled_children=set()
             child_created=False
 
-            for _ in range(n_lsbs):
+            for _ in range(n_current_lsbs):
                 sampled_neighbor=self.local_structure_biased_sampling(
                     node=current_node,
                     walk_path=walk_path,
                     time_interval=(
                         candidate_start,
                         end_time
+                    ),
+                    # Algorithm 3의 한 tree node에서 같은 child를
+                    # 중복 생성하지 않도록 비복원 샘플링한다.
+                    # 이미 방문한 time-expanded state만 가진 이웃도
+                    # 샘플링 후보에서 제외한다.
+                    excluded_neighbors=(
+                        sampled_children
+                        | (
+                            interval_neighbors
+                            - eligible_arrival_times.keys()
+                        )
                     )
                 )
-                if (
-                    sampled_neighbor is None
-                    or sampled_neighbor in sampled_children
-                ):
-                    continue
+                if sampled_neighbor is None:
+                    break
 
                 sampled_children.add(sampled_neighbor)
                 next_arrival_time=eligible_arrival_times[

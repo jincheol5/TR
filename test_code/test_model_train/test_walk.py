@@ -1,7 +1,7 @@
 import argparse
 import torch
 from torch.utils.data import DataLoader
-from utils import DataUtils,TrainUtils,TemporalGraphDataset,TRDataset
+from utils import DataUtils,TrainUtils,TRDataset
 from graph import CTDNE_Graph,ATDGEB_Graph
 from model import CTDNE_TR,ATDGEB_TR
 from model_train import ModelTrainer
@@ -23,7 +23,8 @@ def test_fn(**kwargs):
             seed=1
             data=DataUtils.preprocess_graph(dataset_name=f"enron")
             graph_df=data["graph_df"]
-            graph=CTDNE_Graph(graph_df=graph_df)
+            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
+            graph=CTDNE_Graph(graph_df=graph_df,train_df=train_df)
             graph.set_random_seed(seed=seed)
             n_node=graph.get_num_node()
 
@@ -69,7 +70,6 @@ def test_fn(**kwargs):
 
             ### set data_loader, sample_loader
             # sample
-            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
             train_query_time=train_df["t"].max()
             val_query_time=val_df["t"].max()
             test_query_time=test_df["t"].max()
@@ -133,7 +133,8 @@ def test_fn(**kwargs):
             seed=1
             data=DataUtils.preprocess_graph(dataset_name=f"enron")
             graph_df=data["graph_df"]
-            graph=ATDGEB_Graph(graph_df=graph_df)
+            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
+            graph=ATDGEB_Graph(graph_df=graph_df,train_df=train_df)
             graph.set_random_seed(seed=seed)
             n_node=graph.get_num_node()
 
@@ -177,7 +178,6 @@ def test_fn(**kwargs):
 
             ### set data_loader, sample_loader
             # sample
-            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
             train_query_time=train_df["t"].max()
             val_query_time=val_df["t"].max()
             test_query_time=test_df["t"].max()

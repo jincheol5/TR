@@ -1,6 +1,7 @@
+import pandas as pd
 import numpy as np
 import networkx as nx
-from collections import deque
+from collections import deque,defaultdict
 from utils import SamplingUtils
 from .temporal_graph import TemporalGraph
 
@@ -24,15 +25,40 @@ class ATDGEB_Graph(TemporalGraph):
     
     """
     def __init__(self,
-            graph_df,
+            graph_df:pd.DataFrame,
+            train_df:pd.DataFrame,
             bipartite:bool=False
         ):
         super().__init__(
             graph_df=graph_df,
             bipartite=bipartite
         )
+        # set graph_df for training, train_adj, train_adj_t, train_edge_events
+        self.train_df=train_df
+        self.train_adj=defaultdict(list)
+        self.train_adj_t=defaultdict(list)
+        self.train_edge_events=[]
+        for event in train_df.itertuples(index=False): # col: [u,i,ts,idx=edge_id]
+            src=int(event.u)
+            dst=int(event.i)
+            t=float(event.t)
+            edge_id=int(event.idx)
+            # edge 양방향 저장
+            self.train_adj[dst].append((src,edge_id))
+            self.train_adj_t[dst].append(t)
+            self.train_adj[src].append((dst,edge_id))
+            self.train_adj_t[src].append(t)
+            # edge event 저장
+            self.train_edge_events.append((src,dst,t,edge_id))
+
+        # set train_n_node, train_n_event, train_max_t
+        self.train_n_node=max(train_df["u"].max(),train_df["i"].max())
+        self.train_n_event=train_df["idx"].max()
+        self.train_max_t=train_df["t"].max()
+
+        # setting for random walk
         self.topological_graph=nx.from_pandas_edgelist(
-            self.graph_df,
+            self.train_df,
             source="u",
             target="i",
             create_using=nx.Graph() # Undirected Graph
@@ -172,7 +198,7 @@ class ATDGEB_Graph(TemporalGraph):
                 struct_dim,
                 dtype=np.float32
             )
-            for _ in range(self.n_node+1)
+            for _ in range(self.train_n_node+1)
         ]
 
         level_to_idx={
@@ -228,7 +254,7 @@ class ATDGEB_Graph(TemporalGraph):
                 vec.copy()
                 for vec in prev_stru
             ]
-            for node in range(1,self.n_node+1):
+            for node in self.topological_graph.nodes:
                 neighbors=list(
                     self.topological_graph.neighbors(node)
                 )
@@ -327,7 +353,7 @@ class ATDGEB_Graph(TemporalGraph):
         active_times=sorted(
             set(
                 float(timestamp)
-                for timestamp in self.adj_t.get(node,[])
+                for timestamp in self.train_adj_t.get(node,[])
             )
         )
         n_active_time=len(active_times)
@@ -394,7 +420,6 @@ class ATDGEB_Graph(TemporalGraph):
 
                 if labels[neighbor_idx]==-1:
                     labels[neighbor_idx]=cluster_id
-
             cluster_id+=1
 
         time_intervals=[]
@@ -467,8 +492,8 @@ class ATDGEB_Graph(TemporalGraph):
         candidate_neighbors=[] # 실제 샘플링에 사용할 이웃 목록
         candidate_set=set() # 같은 이웃이 중복으로 추가되는 것을 방지하는 집합
         for (neighbor,_),timestamp in zip(
-                self.adj.get(node,[]),
-                self.adj_t.get(node,[])
+                self.train_adj.get(node,[]),
+                self.train_adj_t.get(node,[])
             ):
             if (
                 start_time<=timestamp<=end_time
@@ -613,8 +638,8 @@ class ATDGEB_Graph(TemporalGraph):
             # 이동할 수 있는 가장 이른 arrival time을 구한다.
             eligible_arrival_times={}
             for (neighbor,_),timestamp in zip(
-                    self.adj.get(current_node,[]),
-                    self.adj_t.get(current_node,[])
+                    self.train_adj.get(current_node,[]),
+                    self.train_adj_t.get(current_node,[])
                 ):
                 if candidate_start<=timestamp<=end_time:
                     previous_timestamp=eligible_arrival_times.get(
@@ -725,7 +750,7 @@ class ATDGEB_Graph(TemporalGraph):
         self.compute_visit_prob()
 
         walks=[]
-        for node in range(1,self.n_node+1):
+        for node in self.topological_graph.nodes:
             node=int(node)
             time_intervals=self.DBSCAN_clustering(
                 node=node,

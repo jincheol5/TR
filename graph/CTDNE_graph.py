@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import numpy as np
 from typing import Literal
+from collections import defaultdict
 from bisect import bisect_right
 from .temporal_graph import TemporalGraph
 from utils import SamplingUtils
@@ -13,12 +14,35 @@ class CTDNE_Graph(TemporalGraph):
     """
     def __init__(self,
             graph_df:pd.DataFrame,
+            train_df:pd.DataFrame,
             bipartite:bool=False
         ):
         super().__init__(
             graph_df=graph_df,
             bipartite=bipartite
         )
+        # set graph_df for training, train_adj, train_adj_t, train_edge_events
+        self.train_df=train_df
+        self.train_adj=defaultdict(list)
+        self.train_adj_t=defaultdict(list)
+        self.train_edge_events=[]
+        for event in train_df.itertuples(index=False): # col: [u,i,ts,idx=edge_id]
+            src=int(event.u)
+            dst=int(event.i)
+            t=float(event.t)
+            edge_id=int(event.idx)
+            # edge 양방향 저장
+            self.train_adj[dst].append((src,edge_id))
+            self.train_adj_t[dst].append(t)
+            self.train_adj[src].append((dst,edge_id))
+            self.train_adj_t[src].append(t)
+            # edge event 저장
+            self.train_edge_events.append((src,dst,t,edge_id))
+
+        # set train_n_node, train_n_event, train_max_t
+        self.train_n_node=max(train_df["u"].max(),train_df["i"].max())
+        self.train_n_event=train_df["idx"].max()
+        self.train_max_t=train_df["t"].max()
 
     def select_start_temporal_edge(self,
             sampling_method:Literal[
@@ -44,25 +68,25 @@ class CTDNE_Graph(TemporalGraph):
             case "uniform":
                 return SamplingUtils.random_sampling(
                     rng=self.rng,
-                    population=self.edge_events
+                    population=self.train_edge_events
                 )
             case "exponential":
                 if temperature<=0:
                     raise ValueError("temperature는 0보다 커야 합니다.")
                 weights=[
-                    math.exp((t-self.max_t)/temperature)
-                    for _,_,t,_ in self.edge_events
+                    math.exp((t-self.train_max_t)/temperature)
+                    for _,_,t,_ in self.train_edge_events
                 ]
                 return SamplingUtils.random_sampling(
                     rng=self.rng,
-                    population=self.edge_events,
+                    population=self.train_edge_events,
                     weights=weights
                 )
             case "linear":
-                n_edge=len(self.edge_events)
+                n_edge=len(self.train_edge_events)
                 return SamplingUtils.random_sampling(
                     rng=self.rng,
-                    population=self.edge_events,
+                    population=self.train_edge_events,
                     weights=range(1,n_edge+1) # 가장 최근 edge가 가중치 높도록 설정
                 )
 
@@ -92,7 +116,7 @@ class CTDNE_Graph(TemporalGraph):
         Return:
             selected neighbor id, selected neighbor event time
         """
-        timestamps=self.adj_t[cur_node]
+        timestamps=self.train_adj_t[cur_node]
         if not timestamps:
             return None
 
@@ -146,7 +170,7 @@ class CTDNE_Graph(TemporalGraph):
                     population=candidate_indices,
                     weights=weights
                 )
-        return self.adj[cur_node][selected_idx][0],self.adj_t[cur_node][selected_idx]
+        return self.train_adj[cur_node][selected_idx][0],self.train_adj_t[cur_node][selected_idx]
 
     def temporal_random_walk(self,
             source:int,

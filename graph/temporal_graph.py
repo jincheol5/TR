@@ -40,6 +40,7 @@ class TemporalGraph:
             self.edge_events.append((src,dst,t,edge_id))
 
         # set n_node, n_event, bipartite, max_u, max_t
+        # 기준: graph_df
         self.n_node=max(graph_df["u"].max(),graph_df["i"].max())
         self.n_event=graph_df["idx"].max()
         self.bipartite=bipartite
@@ -216,67 +217,4 @@ class TemporalGraph:
             "label":label,
             "pos_mask":label.bool(),
             "pair_info":[pair_info[p] for p in pairs]
-        }
-
-
-
-
-    def new_TR_sampling(self,
-            source:torch.Tensor,
-            n_sample:int,
-            query_time:float|None=None,
-            max_hop:int|None=5
-        ):
-        """
-        batch 내의 event들의 src, dst 노드들을 source 로 사용할 경우
-
-        Input:
-            source: [n_src,] long tensor
-            n_sample: int, 각 src마다 생성할 positve/negative sample 개수
-        Return:
-        """
-        pos_pairs=[]
-        neg_pairs=[]
-        pair_info={}
-        nodes=list(range(1,self.n_node+1))
-        for src in source.detach().cpu().tolist():
-            TR_info=self.compute_TR(
-                source=src,
-                query_time=query_time,
-                max_hop=max_hop
-            )
-            pos_nodes=[
-                n for n in nodes
-                if n!=src and TR_info[n]["r"]==1
-            ]
-            neg_nodes=[
-                n for n in nodes
-                if n!=src and TR_info[n]["r"]==0
-            ]
-            pos_dst=self.rng.sample(
-                pos_nodes,
-                min(len(pos_nodes),n_sample)
-            )
-            neg_dst=self.rng.sample(
-                neg_nodes,
-                min(len(neg_nodes),n_sample)
-            )
-            for dst in pos_dst:
-                pos_pairs.append((src,dst))
-                pair_info[(src,dst)]=TR_info[dst].copy()
-            for dst in neg_dst:
-                neg_pairs.append((src,dst))
-                pair_info[(src,dst)]=TR_info[dst].copy()
-        pos_pair={
-            "src":torch.tensor([s for s,_ in pos_pairs],dtype=torch.long),
-            "dst":torch.tensor([d for _,d in pos_pairs],dtype=torch.long)
-        }
-        neg_pair={
-            "src":torch.tensor([s for s,_ in neg_pairs],dtype=torch.long),
-            "dst":torch.tensor([d for _,d in neg_pairs],dtype=torch.long)
-        }
-        return {
-            "pos_pair":pos_pair,
-            "neg_pair":neg_pair,
-            "pair_info":pair_info
         }

@@ -1,6 +1,6 @@
 import argparse
 import torch
-from utils import DataUtils
+from utils import DataUtils,TrainUtils
 from graph import TemporalGraph,CTDNE_Graph,ATDGEB_Graph
 
 """
@@ -44,7 +44,8 @@ def test_fn(**kwargs):
             """
             dataset=DataUtils.preprocess_graph(dataset_name="enron")
             graph_df=dataset["graph_df"]
-            graph=CTDNE_Graph(graph_df=graph_df)
+            train_df,_,_=TrainUtils.split_graph_df(df=graph_df)
+            graph=CTDNE_Graph(graph_df=graph_df,train_df=train_df)
             graph.set_random_seed(seed=1)
 
             # 하이퍼 파라미터
@@ -71,7 +72,8 @@ def test_fn(**kwargs):
             """
             dataset=DataUtils.preprocess_graph(dataset_name="enron")
             graph_df=dataset["graph_df"]
-            graph=ATDGEB_Graph(graph_df=graph_df)
+            train_df,_,_=TrainUtils.split_graph_df(df=graph_df)
+            graph=ATDGEB_Graph(graph_df=graph_df,train_df=train_df)
             graph.set_random_seed(seed=1)
 
             # 하이퍼 파라미터

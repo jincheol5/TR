@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from typing_extensions import Literal
-from graph import TemporalGraph
+from graph import TGN_Graph
 from .time_encoder import TimeEncoder
 
 class Memory(nn.Module):
@@ -9,35 +9,40 @@ class Memory(nn.Module):
             n_node:int,
             mem_dim:int=32
         ):
+        """
+        mem_dim: memory vector dim
+        mem_vec: memory vector
+        mem_t: last update time of memory 
+        """
         super().__init__()
         self.n_node=n_node
         self.mem_dim=mem_dim
-        self.mem_ft=nn.Parameter(
+        self.mem_vec=nn.Parameter(
             torch.zeros((n_node+1,mem_dim)),
             requires_grad=False
         )
-        self.last_update_t=nn.Parameter(
+        self.mem_t=nn.Parameter(
             torch.zeros(n_node+1),
             requires_grad=False
         )
     
     def init_memory_state(self):
         """
-        initialize all the mem_ft and last_update_t to zero vectors, which should be called at the start of each epoch
+        initialize all the mem_ft and mem_t to zero vectors, which should be called at the start of each epoch
         """
-        self.mem_ft.data.zero_()
-        self.last_update_t.data.zero_()
+        self.mem_vec.data.zero_()
+        self.mem_t.data.zero_()
 
-    def get_mem_ft(self,
+    def get_mem_vec(self,
             node:torch.Tensor
         ):
         """
         Input:
             node: [N,]
         Output:
-            mem_ft: [N,mem_dim]
+            mem_vec: [N,mem_dim]
         """
-        return self.mem_ft[node]
+        return self.mem_vec[node]
 
     def get_node_timespan(self,
             node:torch.Tensor,
@@ -51,29 +56,29 @@ class Memory(nn.Module):
             node_ts: [N,1]
         """
         node_ts=torch.abs(
-            event_t-self.last_update_t[node]
+            event_t-self.mem_t[node]
         )
         return node_ts.unsqueeze(-1) # [N,1]
 
     def update_memory_state(self,
             node:torch.Tensor,
-            mem_ft:torch.Tensor,
-            event_t:torch.Tensor
+            mem_vec:torch.Tensor,
+            mem_t:torch.Tensor
         ):
         """
-        Batch 내의 N개의 node들의 새로운 mem_ft와 last_update_t 업데이트 
+        Batch 내의 N개의 node들의 새로운 mem_vec와 mem_t 업데이트 
         Input:
             node: [N,]
-            mem_ft: [N,mem_dim]
+            mem_vec: [N,mem_dim]
             event_t: [N,]
         """
-        self.mem_ft[node]=mem_ft
-        self.last_update_t[node]=event_t
+        self.mem_vec[node]=mem_vec
+        self.mem_t[node]=mem_t
 
     def detach_memory_state(self):
         """
         """
-        self.mem_ft.detach_()
+        self.mem_vec.detach_()
 
 class MemoryUpdater(nn.Module):
     def __init__(self,
@@ -82,7 +87,7 @@ class MemoryUpdater(nn.Module):
             msg_dim:int,
             time_dim:int,
             time_encoder:TimeEncoder,
-            graph:TemporalGraph,
+            graph:TGN_Graph,
             memory:Memory,
             msg_fn:Literal["concat","mlp"]="concat",
             aggr_fn:Literal["last","mean"]="last"
@@ -141,13 +146,13 @@ class MemoryUpdater(nn.Module):
             src_msg: [B,msg_dim]
             dst_msg: [B,msg_dim]
         """
-        src_mem=self.memory.get_mem_ft(node=src)
+        src_mem=self.memory.get_mem_vec(node=src)
         src_ts=self.memory.get_node_timespan(node=src,event_t=event_t)
-        src_ts_ft=self.time_encoder(src_ts)
+        src_ts_vec=self.time_encoder(src_ts)
 
-        dst_mem=self.memory.get_mem_ft(node=dst)
+        dst_mem=self.memory.get_mem_vec(node=dst)
         dst_ts=self.memory.get_node_timespan(node=dst,event_t=event_t)
-        dst_ts_ft=self.time_encoder(dst_ts)
+        dst_ts_vec=self.time_encoder(dst_ts)
 
         edge_ft=self.graph.get_edge_ft(edge=edge)
 
@@ -155,7 +160,7 @@ class MemoryUpdater(nn.Module):
             [
                 src_mem,
                 dst_mem,
-                src_ts_ft,
+                src_ts_vec,
                 edge_ft
             ],
             dim=-1
@@ -165,7 +170,7 @@ class MemoryUpdater(nn.Module):
             [
                 dst_mem,
                 src_mem,
-                dst_ts_ft,
+                dst_ts_vec,
                 edge_ft
             ],
             dim=-1
@@ -227,6 +232,9 @@ class MemoryUpdater(nn.Module):
                     aggr_msg.append(last_msg)
                     aggr_event_t.append(last_t)
             case "mean":
+                """
+                공식 TGN 코드에서는 mean aggregation 시 message vector만 평균하고, memory의 last_update에 사용할 시간은 그 노드의 가장 최근 message의 timestamp를 사용
+                """
                 for node in msg_dict.keys():
                     msg_list=[msg for msg,_ in msg_dict[node]]
                     last_t=msg_dict[node][-1][1]
@@ -275,12 +283,12 @@ class MemoryUpdater(nn.Module):
             dst_msg=dst_msg,
             event_t=event_t
         )
-        updated_mem_ft=self.update_memory_implement(
+        updated_mem_vec=self.update_memory_implement(
             aggr_node=aggr_node,
             aggr_msg=aggr_msg,
             aggr_event_t=aggr_event_t
         )
-        return updated_mem_ft # [unique_N,mem_dim]
+        return updated_mem_vec # [unique_N,mem_dim]
 
 class GRUMemoryUpdater(MemoryUpdater):
     def __init__(self,
@@ -319,11 +327,11 @@ class GRUMemoryUpdater(MemoryUpdater):
             aggr_msg: [unique_N,msg_dim]
             aggr_event_t: [unique_N,]
         """
-        pre_mem_ft=self.memory.get_mem_ft(node=aggr_node) # [unique_N,mem_dim]
-        updated_mem_ft=self.memory_updater(aggr_msg,pre_mem_ft) # [unique_N,mem_dim]
+        pre_mem_vec=self.memory.get_mem_vec(node=aggr_node) # [unique_N,mem_dim]
+        updated_mem_vec=self.memory_updater(aggr_msg,pre_mem_vec) # [unique_N,mem_dim]
         self.memory.update_memory_state(
             node=aggr_node,
-            mem_ft=updated_mem_ft,
+            mem_vec=updated_mem_vec,
             event_t=aggr_event_t
         )
-        return updated_mem_ft # [unique_N,mem_dim]
+        return updated_mem_vec # [unique_N,mem_dim]

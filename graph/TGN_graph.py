@@ -17,10 +17,14 @@ class TGN_Graph(TemporalGraph):
             bipartite=bipartite
         )
         # set node_ft, edge_ft, node_dim, edge_dim
-        if node_ft is None: self.set_node_ft(node_dim=node_dim)
-        else: self.set_node_ft(node_ft=node_ft)
-        if edge_ft is None: self.set_edge_ft(edge_dim=edge_dim)
-        else: self.set_edge_ft(edge_ft=edge_ft)
+        if node_ft is None: 
+            self.set_node_ft(node_dim=node_dim)
+        else: 
+            self.set_node_ft(node_ft=node_ft)
+        if edge_ft is None: 
+            self.set_edge_ft(edge_dim=edge_dim)
+        else: 
+            self.set_edge_ft(edge_ft=edge_ft)
         self.node_dim=node_dim
         self.edge_dim=edge_dim
 

@@ -43,38 +43,38 @@ class TemporalGraphAttn(nn.Module):
             )
         )
     def forward(self,
-            tar_ft:torch.Tensor,
-            tar_ts_ft:torch.Tensor,
-            neighbor_ft:torch.Tensor,
-            neighbor_ts_ft:torch.Tensor,
+            tar_vec:torch.Tensor,
+            tar_ts_vec:torch.Tensor,
+            neighbor_vec:torch.Tensor,
+            neighbor_ts_vec:torch.Tensor,
             neighbor_edge_ft:torch.Tensor,
             neighbor_mask:torch.Tensor
         ):
         """
         Input:
-            tar_ft: [B,input_dim]
-            tar_ts_ft: [B,time_dim]
-            neighbor_ft: [B,K,input_dim]
-            neighbor_ts_ft: [B,K,time_dim]
+            tar_vec: [B,input_dim]
+            tar_ts_vec: [B,time_dim]
+            neighbor_vec: [B,K,input_dim]
+            neighbor_ts_vec: [B,K,time_dim]
             neighbor_edge_ft: [B,K,edge_dim]
             neighbor_mask: [B,K]
         Output:
-            updated tar_ft: # [B,output_dim]
+            updated tar_vec: # [B,output_dim]
         """
         ### set init
-        tar_ft=tar_ft.unsqueeze(dim=1) # -> [B,1,input_dim]
-        tar_ts_ft=tar_ts_ft.unsqueeze(dim=1) # -> [B,1,time_dim]
+        tar_vec=tar_vec.unsqueeze(dim=1) # -> [B,1,input_dim]
+        tar_ts_vec=tar_ts_vec.unsqueeze(dim=1) # -> [B,1,time_dim]
 
         query=torch.cat(
-            [tar_ft,tar_ts_ft],
+            [tar_vec,tar_ts_vec],
             dim=2
         ) # -> [B,1,q_dim]
         key=torch.cat(
-            [neighbor_ft,neighbor_edge_ft,neighbor_ts_ft],
+            [neighbor_vec,neighbor_edge_ft,neighbor_ts_vec],
             dim=2
         ) # -> [B,K,kv_dim]
         value=torch.cat(
-            [neighbor_ft,neighbor_edge_ft,neighbor_ts_ft],
+            [neighbor_vec,neighbor_edge_ft,neighbor_ts_vec],
             dim=2
         ) # -> [B,K,kv_dim]
 
@@ -107,9 +107,9 @@ class TemporalGraphAttn(nn.Module):
         attn_output=attn_output.masked_fill(invalid_neighbor_mask,0) # mask_fill: mask=True인 위치를 value로 덮어쓰기
 
         ### MLPs
-        tar_ft=tar_ft.squeeze() # -> [B,input_dim]
+        tar_vec=tar_vec.squeeze() # -> [B,input_dim]
         ffn_input=torch.cat(
-            [attn_output,tar_ft],
+            [attn_output,tar_vec],
             dim=-1
         ) # -> [B,q_dim||input_dim]
         output=self.MLPs(ffn_input) # [B,output_dim]

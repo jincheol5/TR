@@ -122,12 +122,14 @@ class ATDGEB_TR(ATDGEB_Base):
         ):
         """
         Input:
-            src: [n_sample,] 
-            dst: [n_sample,] 
+            src: [B,] 
+            dst: [B,] 
+        Return:
+            pred_logit: [B,1]
         """
         ### 1. current batch에 대한 embedding
         src_ft=self.node_ft(src)
         dst_ft=self.node_ft(dst)
-        pair_ft=torch.concat([src_ft,dst_ft],dim=-1) # [2B,embed_dim+embed_dim]
-        pred_logit=self.decoder(pair_ft) # [2B,1]
+        pair_vec=torch.concat([src_ft,dst_ft],dim=-1) # [B,embed_dim+embed_dim]
+        pred_logit=self.decoder(pair_vec) # [B,1]
         return pred_logit

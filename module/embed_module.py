@@ -42,9 +42,10 @@ class IdentityEmbedding(EmbeddingModule):
         )
         self.memory=memory
         self.mem_dim=mem_dim
-    def compute_embedding(self,tar):
-        tar_ft=self.memory.get_mem_ft(node=tar) # [B,mem_dim]
-        return tar_ft
+    def compute_embedding(self,
+            tar:torch.Tensor
+        ):
+        return self.memory.get_mem_vec(node=tar) # [B,mem_dim]
 
 class TimeProjectionEmbedding(EmbeddingModule):
     """
@@ -77,14 +78,16 @@ class TimeProjectionEmbedding(EmbeddingModule):
                     self.bias.data.normal_(0,stdv)
         self.embedding_layer=NormalLinear(in_features=1,out_features=self.mem_dim)
 
-    def compute_embedding(self,tar,tar_t):
-        tar_mem=self.memory.get_mem_ft(node=tar) # [B,mem_dim]
+    def compute_embedding(self,
+            tar:torch.Tensor,
+            tar_t:torch.Tensor
+        ):
+        tar_mem=self.memory.get_mem_vec(node=tar) # [B,mem_dim]
         tar_ts=self.memory.get_node_timespan(
             node=tar,
             event_t=tar_t
         ) # [B,1]
-        tar_ft=tar_mem*(1+self.embedding_layer(tar_ts)) # [B,mem_dim]
-        return tar_ft
+        return tar_mem*(1+self.embedding_layer(tar_ts)) # [B,mem_dim]
 
 class GraphEmbeddingModule(EmbeddingModule):
     def __init__(self,
@@ -120,10 +123,10 @@ class GraphEmbeddingModule(EmbeddingModule):
         self.time_encoder=time_encoder
 
     def aggregate(self,
-            tar_ft:torch.Tensor,
-            tar_ts_ft:torch.Tensor,
-            neighbor_ft:torch.Tensor,
-            neighbor_ts_ft:torch.Tensor,
+            tar_vec:torch.Tensor,
+            tar_ts_vec:torch.Tensor,
+            neighbor_vec:torch.Tensor,
+            neighbor_ts_vec:torch.Tensor,
             neighbor_edge_ft:torch.Tensor,
             neighbor_mask:torch.Tensor,
             n_layer:int
@@ -154,7 +157,7 @@ class GraphEmbeddingModule(EmbeddingModule):
         if n_layer==0:
             return tar_ft
         else:
-            tar_ft=self.compute_embedding(
+            tar_vec=self.compute_embedding(
                 tar=tar,
                 tar_t=tar_t,
                 n_layer=n_layer-1
@@ -178,34 +181,34 @@ class GraphEmbeddingModule(EmbeddingModule):
             
             # apply time encoding
             tar_ts=torch.zeros_like(tar,dtype=torch.float32,device=tar.device).unsqueeze(-1) # [n_tar,1]
-            tar_ts_ft=self.time_encoder(tar_ts) # [n_tar,time_dim]
+            tar_ts_vec=self.time_encoder(tar_ts) # [n_tar,time_dim]
             neighbor_ts=neighbor_ts.unsqueeze(-1) # [n_tar,n_neighbor,1]
-            neighbor_ts_ft=self.time_encoder(neighbor_ts) # [n_tar,n_neighbor,time_dim]
+            neighbor_ts_vec=self.time_encoder(neighbor_ts) # [n_tar,n_neighbor,time_dim]
 
             # get neighbor embedding
-            neighbor_ft=self.compute_embedding(
+            neighbor_vec=self.compute_embedding(
                 tar=neighbor,
                 tar_t=neighbor_t,
                 n_layer=n_layer-1
             ) # [n_tar x n_neighbor,tar_dim] if n_layer=1 else [n_tar x n_neighbor,output_dim] 
 
             # reshape
-            neighbor_ft=neighbor_ft.reshape(n_tar,n_neighbor,-1) # -> [n_tar,n_neighbor,tar_dim] or [n_tar,n_neighbor,output_dim]
+            neighbor_vec=neighbor_vec.reshape(n_tar,n_neighbor,-1) # -> [n_tar,n_neighbor,tar_dim] or [n_tar,n_neighbor,output_dim]
 
             # get edge feature
             neighbor_edge_ft=self.graph.get_edge_ft(edge=neighbor_edge) # [n_tar,n_neighbor,edge_dim]
 
             ### Aggregation
-            updated_tar_ft=self.aggregate(
-                tar_ft=tar_ft,
-                tar_ts_ft=tar_ts_ft,
-                neighbor_ft=neighbor_ft,
-                neighbor_ts_ft=neighbor_ts_ft,
+            updated_tar_vec=self.aggregate(
+                tar_vec=tar_vec,
+                tar_ts_vec=tar_ts_vec,
+                neighbor_vec=neighbor_vec,
+                neighbor_ts_vec=neighbor_ts_vec,
                 neighbor_edge_ft=neighbor_edge_ft,
                 neighbor_mask=neighbor_mask,
                 n_layer=n_layer
             )
-            return updated_tar_ft
+            return updated_tar_vec
 
 class GraphSumEmbedding(GraphEmbeddingModule):
     def __init__(self,
@@ -255,32 +258,32 @@ class GraphSumEmbedding(GraphEmbeddingModule):
         self.relu=nn.ReLU()
 
     def aggregate(self,
-            tar_ft:torch.Tensor,
-            tar_ts_ft:torch.Tensor,
-            neighbor_ft:torch.Tensor,
-            neighbor_ts_ft:torch.Tensor,
+            tar_vec:torch.Tensor,
+            tar_ts_vec:torch.Tensor,
+            neighbor_vec:torch.Tensor,
+            neighbor_ts_vec:torch.Tensor,
             neighbor_edge_ft:torch.Tensor,
             neighbor_mask:torch.Tensor,
             n_layer:int
         ):
         """
         Input:
-            tar_ft: [n_tar,tar_dim] or [n_tar,output_dim]
-            tar_ts_ft: [n_tar,time_dim]
-            neighbor_ft: [n_tar,n_neighbor,tar_dim] or [n_tar,n_neighbor,output_dim]
-            neighbor_ts_ft: [n_tar,n_neighbor,time_dim]
+            tar_vec: [n_tar,tar_dim] or [n_tar,output_dim]
+            tar_ts_vec: [n_tar,time_dim]
+            neighbor_vec: [n_tar,n_neighbor,tar_dim] or [n_tar,n_neighbor,output_dim]
+            neighbor_ts_vec: [n_tar,n_neighbor,time_dim]
             neighbor_edge_ft: [n_tar,n_neighbor,edge_dim]
             neighbor_mask: [n_tar,n_neighbor]
             n_layer: int
         """
         # neighbor feature 구성
-        neighbor_ft=torch.concat(
-            [neighbor_ft,neighbor_edge_ft,neighbor_ts_ft],
+        neighbor_vec=torch.concat(
+            [neighbor_vec,neighbor_edge_ft,neighbor_ts_vec],
             dim=-1
         )
 
         # 각 neighbor message 변환: W_1(...)
-        neighbor_msg=self.linear_1[n_layer-1](neighbor_ft) # [n_tar,n_neighbor,output_dim]
+        neighbor_msg=self.linear_1[n_layer-1](neighbor_vec) # [n_tar,n_neighbor,output_dim]
 
         # padding neighbor 제거, neighbor_mask가 valid=True라면 그대로 사용
         neighbor_msg=neighbor_msg.masked_fill(
@@ -293,14 +296,14 @@ class GraphSumEmbedding(GraphEmbeddingModule):
         neighbor_sum=self.relu(neighbor_sum)
 
         # target node feature 구성
-        tar_ft=torch.concat(
-            [tar_ft,tar_ts_ft],
+        tar_vec=torch.concat(
+            [tar_vec,tar_ts_vec],
             dim=-1
         )  # [n_tar,tar_dim+time_dim] or [n_tar,output_dim+time_dim]
 
         # self feature와 neighbor aggregate 결합
         output=torch.concat(
-            [tar_ft,neighbor_sum],
+            [tar_vec,neighbor_sum],
             dim=-1
         )  # [n_tar,tar_dim+time_dim+output_dim] or [n_tar,output_dim+time_dim+output_dim]
 
@@ -351,30 +354,30 @@ class GraphAttnEmbedding(GraphEmbeddingModule):
                 )
             for idx in range(n_layer)])
     def aggregate(self,
-            tar_ft:torch.Tensor,
-            tar_ts_ft:torch.Tensor,
-            neighbor_ft:torch.Tensor,
-            neighbor_ts_ft:torch.Tensor,
+            tar_vec:torch.Tensor,
+            tar_ts_vec:torch.Tensor,
+            neighbor_vec:torch.Tensor,
+            neighbor_ts_vec:torch.Tensor,
             neighbor_edge_ft:torch.Tensor,
             neighbor_mask:torch.Tensor,
             n_layer:int
         ):
         """
         Input:
-            tar_ft: [n_tar,tar_dim] or [n_tar,output_dim]
-            tar_ts_ft: [n_tar,time_dim]
-            neighbor_ft: [n_tar,n_neighbor,tar_dim] or [n_tar,n_neighbor,output_dim]
-            neighbor_ts_ft: [n_tar,n_neighbor,time_dim]
+            tar_vec: [n_tar,tar_dim] or [n_tar,output_dim]
+            tar_ts_vec: [n_tar,time_dim]
+            neighbor_vec: [n_tar,n_neighbor,tar_dim] or [n_tar,n_neighbor,output_dim]
+            neighbor_ts_vec: [n_tar,n_neighbor,time_dim]
             neighbor_edge_ft: [n_tar,n_neighbor,edge_dim]
             neighbor_mask: [n_tar,n_neighbor]
             n_layer: int
         """
         aggr_module=self.attn_layers[n_layer-1]
         output=aggr_module(
-            tar_ft=tar_ft,
-            tar_ts_ft=tar_ts_ft,
-            neighbor_ft=neighbor_ft,
-            neighbor_ts_ft=neighbor_ts_ft,
+            tar_vec=tar_vec,
+            tar_ts_vec=tar_ts_vec,
+            neighbor_vec=neighbor_vec,
+            neighbor_ts_vec=neighbor_ts_vec,
             neighbor_edge_ft=neighbor_edge_ft,
             neighbor_mask=neighbor_mask
         ) # [n_tar,output_dim]

@@ -83,26 +83,33 @@ class TGAT_TR(TGAT_Base):
         )
 
     def forward(self,
-            pos_pair:dict,
-            neg_pair:dict
+            src:torch.Tensor,
+            dst:torch.Tensor,
+            event_t:torch.Tensor,
         ):
         """
-        Input:
-            pos_pair: dict
-                key: src, dst
-                value: 
-                    src: [B,] 
-                    dst: [B,] 
-            neg_pair: dict
-                key: src, dst
-                value: 
-                    src: [B,] 
-                    dst: [B,] 
+        Input: sampling 된 pos/neg pair의 src,dst,event_t
+            src: [B,] 
+            dst: [B,]
+            event_t: [B,]
+        Return:
+            pred_logit: [B,1]
         """
-        ### 0. unpack node pair dict
-        pos_src=pos_pair["src"]
-        pos_dst=pos_pair["dst"]
-        neg_src=neg_pair["src"]
-        neg_dst=neg_pair["dst"]
-        src=torch.concat([pos_src,neg_src],dim=0) # [2B,]
-        dst=torch.concat([pos_dst,neg_dst],dim=0) # [2B,]
+        batch_size=src.size(0) # B
+        tar=torch.concat([src,dst],dim=0) # [2B,]
+        tar_t=torch.cat([event_t,event_t],dim=0) # [2B,]
+
+        # encoding
+        tar_vec=self.encoder.compute_embedding(
+            tar=tar,
+            tar_t=tar_t,
+            n_layer=self.n_layer
+        ) # [2B,output_dim]
+
+        # split to src,dst
+        src_vec=tar_vec[:batch_size]
+        dst_vec=tar_vec[batch_size:]
+
+        pair_vec=torch.concat([src_vec,dst_vec],dim=-1) # [B,output_dim+output_dim]
+        pred_logit=self.decoder(pair_vec) # [B,1]
+        return pred_logit

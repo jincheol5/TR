@@ -135,26 +135,16 @@ class TGN_TR(TGN_Base):
         )
 
     def forward(self,
-            pos_pair:dict,
-            neg_pair:dict
+            src:torch.Tensor,
+            dst:torch.Tensor,
+            event_t:torch.Tensor,
         ):
         """
-        Input:
-            pos_pair: dict
-                key: src, dst
-                value: 
-                    src: [B,] 
-                    dst: [B,] 
-            neg_pair: dict
-                key: src, dst
-                value: 
-                    src: [B,] 
-                    dst: [B,] 
+        Input: sampling 된 pos/neg pair의 src,dst,event_t
+            src: [B,] 
+            dst: [B,]
+            event_t: [B,]
+        Return:
+            pred_logit: [B,1]
         """
-        ### 0. unpack node pair dict
-        pos_src=pos_pair["src"]
-        pos_dst=pos_pair["dst"]
-        neg_src=neg_pair["src"]
-        neg_dst=neg_pair["dst"]
-        src=torch.concat([pos_src,neg_src],dim=0) # [2B,]
-        dst=torch.concat([pos_dst,neg_dst],dim=0) # [2B,]
+

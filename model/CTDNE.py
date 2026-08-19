@@ -4,7 +4,7 @@ from typing import Literal
 from graph import CTDNE_Graph
 from module import SkipGram
 
-class CTDNE_Base(nn.Module):
+class CTDNE(nn.Module):
     def __init__(self,
             embed_dim:int,
             latent_dim:int,
@@ -28,6 +28,19 @@ class CTDNE_Base(nn.Module):
         )
         # downstream 학습 시 노드 임베딩을 고정
         self.node_ft.weight.requires_grad_(False)
+
+        # decoder
+        self.decoder=nn.Sequential(
+            nn.Linear(
+                in_features=embed_dim+embed_dim,
+                out_features=latent_dim
+            ),
+            nn.ReLU(),
+            nn.Linear(
+                in_features=latent_dim,
+                out_features=1
+            )
+        )
 
     def convert_SkipGram_to_torch_embedding(self):
         """
@@ -105,35 +118,6 @@ class CTDNE_Base(nn.Module):
         ### Gensim 임베딩을 PyTorch nn.Embedding으로 변환 후 저장
         self.convert_SkipGram_to_torch_embedding()
         self.skipgram_trained=True
-
-    def forward(self):
-        return NotImplemented
-
-class CTDNE_TR(CTDNE_Base):
-    def __init__(self, 
-            embed_dim:int,
-            latent_dim:int,
-            window_size:int,
-            graph:CTDNE_Graph
-        ):
-        super(CTDNE_TR,self).__init__(
-            embed_dim=embed_dim, 
-            latent_dim=latent_dim, 
-            window_size=window_size,
-            graph=graph 
-        )
-        # decoder
-        self.decoder=nn.Sequential(
-            nn.Linear(
-                in_features=embed_dim+embed_dim,
-                out_features=latent_dim
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                in_features=latent_dim,
-                out_features=1
-            )
-        )
 
     def forward(self,
             src:torch.Tensor,

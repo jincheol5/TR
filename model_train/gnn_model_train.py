@@ -9,9 +9,10 @@ class GNNModelTrainer:
     GNN Model 학습/평가
     """
     @staticmethod
-    def train_gnn_model(
+    def train_model(
             model:nn.Module,
             train_loader:DataLoader,
+            val_loader:DataLoader,
             val_sample_loader:DataLoader,
             **kwargs
         ):
@@ -120,12 +121,43 @@ class GNNModelTrainer:
                 loss.backward()
                 optimizer.step()
 
+            """
+            Validate Model
+            """
+            acc=GNNModelTrainer.evaluate_model(
+                model=model,
+                data_loader=val_loader,
+                sample_loader=val_sample_loader,
+                **kwargs
+            )
+            print(f"Validate ACC: {acc}")
+
+            """
+            Check Early Stop
+            """
+            val_loss=GNNModelTrainer.compute_validate_loss(
+                model=model,
+                val_loader=val_loader,
+                val_sample_loader=val_sample_loader,
+                **kwargs
+            )
+            print(f"{epoch+1} epoch Validate Loss: {val_loss}")
+            if kwargs["early_stop"]:
+                pre_model=early_stop(
+                    val_loss=val_loss,
+                    model=model
+                )
+                if early_stop.early_stop:
+                    model=pre_model
+                    print(f"Early Stop in epoch {epoch+1}")
+                    break
+        return model
 
     @staticmethod
     def compute_validate_loss(
-            model,
+            model:nn.Module,
             val_loader:DataLoader,
-            val_sample_loader:list,
+            val_sample_loader:DataLoader,
             **kwargs
         ):
         if torch.cuda.is_available():
@@ -140,32 +172,22 @@ class GNNModelTrainer:
         """
         compute validate loss
         """
+        loss_list=[]
         with torch.no_grad():
             if kwargs["model_name"] in ("TGN"):
-                for event_src,event_dst,event_t,event_edge in tqdm(
-                        val_loader,
-                        desc=f"update memory..."
-                    ):
+                for event_src,event_dst,event_t,event_edge in tqdm(val_loader,desc=f"update memory..."):
                     event_src=event_src.to(device)
                     event_dst=event_dst.to(device)
                     event_t=event_t.to(device)
                     event_edge=event_edge.to(device)
-                    event={
-                        "src":event_src,
-                        "dst":dst,
-                        "event_t":event_t,
-                        "edge":event_edge
-                    }
-                    model(event=event) # memory update만 수행
-                
-
-        loss_list=[]
-        with torch.no_grad():
-            for (event_src,event_dst,event_t,event_edge),sample in tqdm(
-                    zip(val_loader,val_sample_loader),
-                    total=len(val_loader),
-                    desc=f"Compute Val_Loss..."
-                ):
+                    model.update_model_memory(
+                        event_src=event_src,
+                        event_dst=event_dst,
+                        event_t=event_t,
+                        event_edge=event_edge
+                    ) # memory update만 수행
+            
+            for sample in tqdm(val_sample_loader,desc=f"Compute Val_Loss..."):
                 src=torch.cat([
                     sample["pos_src"],
                     sample["neg_src"]
@@ -187,31 +209,11 @@ class GNNModelTrainer:
                 query_t=query_t.to(device)
                 label=label.to(device)
 
-                match kwargs["model_name"]:
-                    case "TGN":
-                        event_src=event_src.to(device)
-                        event_dst=event_dst.to(device)
-                        event_t=event_t.to(device)
-                        event_edge=event_edge.to(device)
-                        event={
-                            "src":event_src,
-                            "dst":dst,
-                            "event_t":event_t,
-                            "edge":event_edge
-                        }
-                        pred_logit=model(
-                            src=src,
-                            dst=dst,
-                            query_t=query_t,
-                            event=event
-                        ) # [B,1]
-
-                    case "TGAT"|"DyGFormer":
-                        pred_logit=model(
-                            src=src,
-                            dst=dst,
-                            query_t=query_t
-                        ) # [B,1]
+                pred_logit=model(
+                    src=src,
+                    dst=dst,
+                    query_t=query_t
+                ) # [B,1]
 
                 ### Loss
                 pred_logit=pred_logit.squeeze(-1) # -> [B,]
@@ -219,3 +221,72 @@ class GNNModelTrainer:
                 loss=criterion(pred_logit,label)
                 loss_list.append(loss)
         return torch.stack(loss_list).mean().item()
+
+    @staticmethod
+    def evaluate_model(
+            model:nn.Module,
+            data_loader:DataLoader,
+            sample_loader:list,
+            **kwargs
+        ):
+        if torch.cuda.is_available():
+            device=torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device=torch.device("mps")
+        else:
+            device=torch.device("cpu")
+        model.to(device)
+        model.eval()
+
+        acc_list=[]
+        with torch.no_grad():
+            if kwargs["model_name"] in ("TGN"):
+                for event_src,event_dst,event_t,event_edge in tqdm(data_loader,desc=f"update memory..."):
+                    event_src=event_src.to(device)
+                    event_dst=event_dst.to(device)
+                    event_t=event_t.to(device)
+                    event_edge=event_edge.to(device)
+                    model.update_model_memory(
+                        event_src=event_src,
+                        event_dst=event_dst,
+                        event_t=event_t,
+                        event_edge=event_edge
+                    ) # memory update만 수행
+
+            for sample in tqdm(sample_loader,desc=f"Evaluating..."):
+                src=torch.cat([
+                    sample["pos_src"],
+                    sample["neg_src"]
+                ])
+                dst=torch.cat([
+                    sample["pos_dst"],
+                    sample["neg_dst"]
+                ])
+                query_t=torch.cat([
+                    sample["pos_pair_t"],
+                    sample["neg_pair_t"]
+                ]).float()
+                label=torch.cat([
+                    sample["pos_label"],
+                    sample["neg_label"]
+                ]).float()
+                src=src.to(device)
+                dst=dst.to(device)
+                query_t=query_t.to(device)
+                label=label.to(device)
+
+                pred_logit=model(
+                    src=src,
+                    dst=dst,
+                    query_t=query_t
+                ) # [B,1]
+                
+                ### compute ACC
+                pred_logit=pred_logit.squeeze(-1) # -> [B,]
+                batch_acc=Metric.compute_accuracy(
+                    pred_logit=pred_logit,
+                    label=label
+                )
+                acc_list.append(batch_acc)
+        acc=sum(acc_list)/len(acc_list)
+        return acc

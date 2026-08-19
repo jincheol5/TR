@@ -3,7 +3,7 @@ import torch.nn as nn
 from graph import TGN_Graph
 from module import TimeEncoder,GraphAttnEmbedding
 
-class TGAT_Base(nn.Module):
+class TGAT(nn.Module):
     def __init__(self,
             node_dim:int,
             edge_dim:int,
@@ -43,32 +43,7 @@ class TGAT_Base(nn.Module):
             use_memory=False,
             time_encoder=self.time_encoder
         )
-    def forward(self):
-        return NotImplemented
 
-class TGAT_TR(TGAT_Base):
-    def __init__(self,
-            node_dim:int,
-            edge_dim:int,
-            latent_dim:int,
-            time_dim:int,
-            output_dim:int,
-            graph:TGN_Graph,
-            n_layer:int,
-            n_neighbor:int,
-            n_head:int
-        ):
-        super(TGAT_TR,self).__init__(
-            node_dim=node_dim,
-            edge_dim=edge_dim,
-            latent_dim=latent_dim,
-            time_dim=time_dim,
-            output_dim=output_dim,
-            graph=graph,
-            n_layer=n_layer,
-            n_neighbor=n_neighbor,
-            n_head=n_head
-        )
         # decoder
         self.decoder=nn.Sequential(
             nn.Linear(
@@ -112,3 +87,7 @@ class TGAT_TR(TGAT_Base):
         pair_vec=torch.concat([src_vec,dst_vec],dim=-1) # [B,output_dim+output_dim]
         pred_logit=self.decoder(pair_vec) # [B,1]
         return pred_logit
+
+
+
+

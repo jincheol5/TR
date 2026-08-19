@@ -3,7 +3,7 @@ import torch.nn as nn
 from graph import DyGFormer_Graph
 from module import TimeEncoder,TransformerEncoderBlock,DyGFormer_Module
 
-class DyGFormer_Base(nn.Module):
+class DyGFormer(nn.Module):
     def __init__(self,
             node_dim:int,
             edge_dim:int,
@@ -86,39 +86,6 @@ class DyGFormer_Base(nn.Module):
         self.output_layer=nn.Linear(
             in_features=4*common_dim,
             out_features=output_dim
-        )
-
-    def forward(self):
-        return NotImplemented
-
-class DyGFormer_TR(DyGFormer_Base):
-    def __init__(self,
-            node_dim:int,
-            edge_dim:int,
-            latent_dim:int,
-            time_dim:int,
-            output_dim:int,
-            co_dim:int,
-            common_dim:int,
-            patch_size:int,
-            graph:DyGFormer_Graph,
-            max_n_neighbor:int,
-            n_layer:int,
-            n_head:int
-        ):
-        super(DyGFormer_TR,self).__init__(
-            node_dim=node_dim,
-            edge_dim=edge_dim,
-            latent_dim=latent_dim,
-            time_dim=time_dim,
-            output_dim=output_dim,
-            co_dim=co_dim,
-            common_dim=common_dim,
-            patch_size=patch_size,
-            graph=graph,
-            max_n_neighbor=max_n_neighbor,
-            n_layer=n_layer,
-            n_head=n_head
         )
         # decoder
         self.decoder=nn.Sequential(

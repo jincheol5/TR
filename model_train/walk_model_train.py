@@ -9,7 +9,7 @@ class WalkModelTrainer:
     Walk-based Model 학습/평가
     """
     @staticmethod
-    def train_walk_model(
+    def train_model(
             model:nn.Module,
             train_sample_loader:DataLoader,
             val_sample_loader:DataLoader,
@@ -111,7 +111,7 @@ class WalkModelTrainer:
             """
             Validate Model
             """
-            acc=WalkModelTrainer.evaluate_walk_model(
+            acc=WalkModelTrainer.evaluate_model(
                 model=model,
                 sample_loader=val_sample_loader,
                 **kwargs
@@ -186,7 +186,7 @@ class WalkModelTrainer:
         return torch.stack(loss_list).mean().item()
 
     @staticmethod
-    def evaluate_walk_model(
+    def evaluate_model(
             model:nn.Module,
             sample_loader:list,
             **kwargs

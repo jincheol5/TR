@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-class ReachTGNModule:
+class ReaCH_TGN_Module:
     def __init__(self):
         pass
 

@@ -1,7 +1,7 @@
 import random
 import numpy as np
 
-class SamplingUtils:
+class RandomWalkUtils:
     @staticmethod
     def compute_similarity(
             vec_a:np.ndarray,

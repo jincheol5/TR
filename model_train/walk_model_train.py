@@ -4,7 +4,10 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from utils import TrainUtils,Metric,EarlyStopper
 
-class ModelTrainer:
+class WalkModelTrainer:
+    """
+    Walk-based Model 학습/평가
+    """
     @staticmethod
     def train_walk_model(
             model:nn.Module,
@@ -12,12 +15,6 @@ class ModelTrainer:
             val_sample_loader:DataLoader,
             **kwargs
         ):
-        """
-        Set Early Stopper
-        """
-        if kwargs["early_stop"]:
-            early_stop=EarlyStopper(patience=kwargs["patience"])
-
         """
         Train Skip-Gram
         """
@@ -44,7 +41,7 @@ class ModelTrainer:
         print(f"Finish to train Skip-Gram")
 
         """
-        Train Decoder
+        Set GPU, Optimizer
         """
         if torch.cuda.is_available():
             device=torch.device("cuda")
@@ -64,6 +61,12 @@ class ModelTrainer:
                 model.parameters(),
                 lr=kwargs["lr"]
             )
+
+        """
+        Set Early Stopper
+        """
+        if kwargs["early_stop"]:
+            early_stop=EarlyStopper(patience=kwargs["patience"])
 
         """
         Model Train
@@ -108,7 +111,7 @@ class ModelTrainer:
             """
             Validate Model
             """
-            acc=ModelTrainer.evaluate_walk_model(
+            acc=WalkModelTrainer.evaluate_walk_model(
                 model=model,
                 sample_loader=val_sample_loader,
                 **kwargs
@@ -118,7 +121,7 @@ class ModelTrainer:
             """
             Check Early Stop
             """
-            val_loss=ModelTrainer.compute_validate_loss(
+            val_loss=WalkModelTrainer.compute_validate_loss(
                 model=model,
                 val_sample_loader=val_sample_loader
             )

@@ -1,1 +1,1 @@
-from .model_train import *
+from .walk_model_train import *

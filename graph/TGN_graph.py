@@ -77,7 +77,9 @@ class TGN_Graph(TemporalGraph):
                 dtype=torch.float32
             )
 
-    def get_node_ft(self,node:torch.Tensor=None):
+    def get_node_ft(self,
+            node:torch.Tensor|None=None
+        ):
         """
         Input:
             node: [B,]
@@ -85,9 +87,14 @@ class TGN_Graph(TemporalGraph):
             node_ft
         """
         device=node.device
-        return self.node_ft.to(device=device)[node]
+        if node is None:
+            return self.node_ft
+        else:
+            return self.node_ft.to(device=device)[node]
 
-    def get_edge_ft(self,edge:torch.Tensor=None):
+    def get_edge_ft(self,
+            edge:torch.Tensor|None=None
+        ):
         """
         Input:
             edge: [B,]
@@ -95,7 +102,10 @@ class TGN_Graph(TemporalGraph):
             edge_ft
         """
         device=edge.device
-        return self.edge_ft.to(device=device)[edge]
+        if edge is None:
+            return self.edge_ft
+        else:
+            return self.edge_ft.to(device=device)[edge]
 
     def get_temporal_neighbor(self,
             tar:torch.Tensor,

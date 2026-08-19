@@ -33,7 +33,10 @@ class TRDataset(Dataset):
     Return:
         각 item은 positive 1개, negative 1개로 구성
     """
-    def __init__(self,sample:dict):
+    def __init__(self,
+            sample:dict,
+            query_time:float
+        ):
         pos_mask=sample["pos_mask"]
         neg_mask=~pos_mask
 
@@ -65,6 +68,16 @@ class TRDataset(Dataset):
             len(self.pos_src),
             len(self.neg_src)
         )
+        self.pos_pair_t=torch.full(
+            (self.n_sample,),
+            query_time,
+            dtype=torch.float
+        )
+        self.neg_pair_t=torch.full(
+            (self.n_sample,),
+            query_time,
+            dtype=torch.float
+        )
 
     def __len__(self):
         return self.n_sample
@@ -75,10 +88,12 @@ class TRDataset(Dataset):
             "pos_dst":self.pos_dst[idx],
             "pos_label":self.pos_label[idx],
             "pos_info":self.pos_info[idx],
+            "pos_pair_t":self.pos_pair_t[idx],
             "neg_src":self.neg_src[idx],
             "neg_dst":self.neg_dst[idx],
             "neg_label":self.neg_label[idx],
             "neg_info":self.neg_info[idx],
+            "neg_pair_t":self.neg_pair_t[idx]
         }
 
 class TrainUtils:
@@ -105,6 +120,34 @@ class TrainUtils:
         val_df=df.iloc[train_end:val_end].reset_index(drop=True)
         test_df=df.iloc[val_end:].reset_index(drop=True)
         return train_df,val_df,test_df
+
+    @staticmethod
+    def get_sample_list(
+            graph:TemporalGraph,
+            max_hop:int,
+            n_batch_sample:int,
+            n_pair:int,
+            data_loader:DataLoader
+        ):
+        """
+        각 batch의 가장 큰 event_time을 query_time으로 하여 batch마다 graph.random_TR_sampling() 함수 수행 후 순서대로 리스트에 넣어서 리스트 반환하는 함수.
+        data_loader는 TemporalGraphDataset에 대한 batch loader이다.
+        각 sample 개수 = batch_size
+        """
+        sample_list=[]
+        for _,_,event_t,_ in tqdm(
+                data_loader,
+                desc="Generating TR samples for training..."
+            ):
+            query_time=event_t.max().item()
+            sample=graph.random_TR_sampling(
+                n_sample=n_batch_sample, 
+                n_pair=n_pair,
+                max_hop=max_hop,
+                query_time=query_time
+            )
+            sample_list.append(sample)
+        return sample_list
 
 class EarlyStopper:
     def __init__(self,

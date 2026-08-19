@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 from collections import deque,defaultdict
-from utils import SamplingUtils
+from utils import RandomWalkUtils
 from .temporal_graph import TemporalGraph
 
 class ATDGEB_Graph(TemporalGraph):
@@ -263,7 +263,7 @@ class ATDGEB_Graph(TemporalGraph):
                     continue
 
                 similarities=np.asarray([
-                    SamplingUtils.compute_similarity(
+                    RandomWalkUtils.compute_similarity(
                         prev_stru[node],
                         prev_stru[neighbor]
                     )
@@ -319,7 +319,7 @@ class ATDGEB_Graph(TemporalGraph):
             visit_prob[node]={}
             for neighbor in self.topological_graph.neighbors(node):
                 neighbor=int(neighbor)
-                visit_prob[node][neighbor]=SamplingUtils.compute_similarity(
+                visit_prob[node][neighbor]=RandomWalkUtils.compute_similarity(
                     vec_a=self.stru[node],
                     vec_b=self.stru[neighbor]
                 )
@@ -565,7 +565,7 @@ class ATDGEB_Graph(TemporalGraph):
             if any(weight>0.0 for weight in weights)
             else None
         )
-        return SamplingUtils.random_sampling(
+        return RandomWalkUtils.random_sampling(
             rng=self.rng,
             population=candidate_neighbors,
             weights=sampling_weights

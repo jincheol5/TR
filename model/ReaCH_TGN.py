@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 from typing_extensions import Literal
 from graph import TGN_Graph
-from module import TimeEncoder,Memory,GraphAttnEmbedding,MemoryUpdater
+from module import TimeEncoder,Memory,GraphAttnEmbedding,MemoryUpdater,ReaCH_TGN_Module
 
-class TGN(nn.Module):
+class ReaCH_TGN(nn.Module):
     def __init__(self,
             node_dim:int,
             edge_dim:int,
@@ -36,6 +36,9 @@ class TGN(nn.Module):
         
         # graph
         self.graph=graph
+
+        # ReaCH-TGN Module
+        self.module=ReaCH_TGN_Module() 
 
         # memory
         self.n_node=self.graph.get_num_node()
@@ -87,58 +90,9 @@ class TGN(nn.Module):
             )
         )
 
-    def update_model_memory(self,
-            event_src:torch.Tensor,
-            event_dst:torch.Tensor,
-            event_t:torch.Tensor,
-            event_edge:torch.Tensor
-        ):
-        """
-        """
-        ### update memory
-        self.memory_updater.update_memory(
-            src=event_src,
-            dst=event_dst,
-            event_t=event_t,
-            edge=event_edge
-        )
-
     def forward(self,
-            src:torch.Tensor,
-            dst:torch.Tensor,
-            query_t:torch.Tensor,
-            event:dict|None=None
+
+
         ):
         """
-        Memory update -> eventstream 기반
-        Embedding -> sample 기반
-        src, dst, query_time = sampling 된 pos/neg pair의 src, dst, query_time
         """
-        if event is not None:
-            self.update_model_memory(
-                event_src=event["src"],
-                event_dst=event["dst"],
-                event_t=event["event_t"],
-                event_edge=event["edge"]
-            )
-
-        ### 1. embed about node pair
-        tar=torch.concat([src,dst],dim=0) 
-        tar_t=torch.cat([query_t,query_t],dim=0) 
-        tar_vec=self.encoder.compute_embedding(
-            tar=tar,
-            tar_t=tar_t,
-            n_layer=self.n_layer
-        )
-
-        ### 2. compute node pair vector for predict TR
-        batch_size=src.size(0) 
-        src_vec=tar_vec[:batch_size]
-        dst_vec=tar_vec[batch_size:]
-        pair_vec=torch.concat([src_vec,dst_vec],dim=-1) # [B,output_dim+output_dim]
-        pred_logit=self.decoder(pair_vec) # [B,1]
-        return pred_logit
-
-
-
-

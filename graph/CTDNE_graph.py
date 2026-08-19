@@ -6,7 +6,7 @@ from typing import Literal
 from collections import defaultdict
 from bisect import bisect_right
 from .temporal_graph import TemporalGraph
-from utils import SamplingUtils
+from utils import RandomWalkUtils
 
 class CTDNE_Graph(TemporalGraph):
     """
@@ -66,7 +66,7 @@ class CTDNE_Graph(TemporalGraph):
         """
         match sampling_method:
             case "uniform":
-                return SamplingUtils.random_sampling(
+                return RandomWalkUtils.random_sampling(
                     rng=self.rng,
                     population=self.train_edge_events
                 )
@@ -77,14 +77,14 @@ class CTDNE_Graph(TemporalGraph):
                     math.exp((t-self.train_max_t)/temperature)
                     for _,_,t,_ in self.train_edge_events
                 ]
-                return SamplingUtils.random_sampling(
+                return RandomWalkUtils.random_sampling(
                     rng=self.rng,
                     population=self.train_edge_events,
                     weights=weights
                 )
             case "linear":
                 n_edge=len(self.train_edge_events)
-                return SamplingUtils.random_sampling(
+                return RandomWalkUtils.random_sampling(
                     rng=self.rng,
                     population=self.train_edge_events,
                     weights=range(1,n_edge+1) # 가장 최근 edge가 가중치 높도록 설정
@@ -131,7 +131,7 @@ class CTDNE_Graph(TemporalGraph):
         match sampling_method:
             case "uniform":
                 # [start_idx,len(timestamps)-1]에서 균등하게 index 선택
-                selected_idx=SamplingUtils.random_sampling(
+                selected_idx=RandomWalkUtils.random_sampling(
                     rng=self.rng,
                     population=candidate_indices
                 )
@@ -152,7 +152,7 @@ class CTDNE_Graph(TemporalGraph):
                     math.exp(-(time_diff-min_time_diff))
                     for time_diff in time_diffs
                 ]
-                selected_idx=SamplingUtils.random_sampling(
+                selected_idx=RandomWalkUtils.random_sampling(
                     rng=self.rng,
                     population=candidate_indices,
                     weights=weights
@@ -165,7 +165,7 @@ class CTDNE_Graph(TemporalGraph):
                 weights=list(
                     range(n_candidate,0,-1)
                 )
-                selected_idx=SamplingUtils.random_sampling(
+                selected_idx=RandomWalkUtils.random_sampling(
                     rng=self.rng,
                     population=candidate_indices,
                     weights=weights

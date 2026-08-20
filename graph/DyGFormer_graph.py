@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import torch
-import torch.nn.functional as F
 from .TGN_graph import TGN_Graph
 
 class DyGFormer_Graph(TGN_Graph):
@@ -32,7 +31,7 @@ class DyGFormer_Graph(TGN_Graph):
     def get_history_seq(self,
             node:torch.Tensor,
             event_t:torch.Tensor,
-            max_n_neighbor:int
+            n_neighbor:int
         ):
         """
         batch 내 각 노드의 1-hop history sequence를 구해 list로 반환.
@@ -42,12 +41,17 @@ class DyGFormer_Graph(TGN_Graph):
         Input:
             node: [B,]
             event_t: [B,]
-            max_n_neighbor: int
+            n_neighbor: int
         Return:
             node_seq_list: list of each node's history neighbor sequence 
             edge_seq_list: list of each node's history edge sequence
             ts_seq_list: list of each node's history timespan sequence
         """
+        if n_neighbor<0:
+            raise ValueError(
+                f"n_neighbor must be non-negative: {n_neighbor}"
+            )
+
         node_seq_list=[]
         edge_seq_list=[]
         ts_seq_list=[]
@@ -55,32 +59,32 @@ class DyGFormer_Graph(TGN_Graph):
                 node.detach().cpu().numpy(),
                 event_t.detach().cpu().numpy()
             ):
-            neighbors=self.adj.get(int(node_id),[])
-            times=np.asarray(
-                self.adj_t.get(int(node_id),[]),
-                dtype=np.float32
-            )
-            cut_idx=np.searchsorted(
+            node_id=int(node_id)
+            cut_time=float(cut_time)
+            neighbors=self.adj[node_id]
+            edges=self.adj_edge[node_id]
+            times=self.adj_t[node_id]
+
+            cut_idx=int(np.searchsorted(
                 times,
                 cut_time,
                 side="left"
-            )
-            start_idx=max(0,cut_idx-max_n_neighbor)
+            ))
+            start_idx=max(0,cut_idx-n_neighbor)
             selected_neighbors=neighbors[start_idx:cut_idx]
+            selected_edges=edges[start_idx:cut_idx]
             selected_times=times[start_idx:cut_idx]
             node_seq_list.append(
-                np.asarray(
-                    [int(node_id)] +
-                    [n for n,_ in selected_neighbors],
-                    dtype=np.int64
-                )
+                np.concatenate([
+                    np.asarray([node_id],dtype=np.int64),
+                    selected_neighbors
+                ])
             )
             edge_seq_list.append(
-                np.asarray(
-                    [0] +
-                    [e for _,e in selected_neighbors],
-                    dtype=np.int64
-                )
+                np.concatenate([
+                    np.asarray([0],dtype=np.int64),
+                    selected_edges
+                ])
             )
             ts_seq_list.append(
                 np.concatenate([
@@ -93,4 +97,3 @@ class DyGFormer_Graph(TGN_Graph):
             "edge": edge_seq_list,
             "ts": ts_seq_list
         }
-

@@ -28,6 +28,12 @@ class TGN_Graph(TemporalGraph):
         self.node_dim=node_dim
         self.edge_dim=edge_dim
 
+    def to_device(self,
+            device:torch.device
+        ):
+        self.node_ft=self.node_ft.to(device)
+        self.edge_ft=self.edge_ft.to(device)
+
     def set_node_ft(self,
             node_ft:np.ndarray=None,
             node_dim:int=32
@@ -86,11 +92,10 @@ class TGN_Graph(TemporalGraph):
         Return:
             node_ft
         """
-        device=node.device
         if node is None:
             return self.node_ft
         else:
-            return self.node_ft.to(device=device)[node]
+            return self.node_ft[node]
 
     def get_edge_ft(self,
             edge:torch.Tensor|None=None
@@ -101,11 +106,10 @@ class TGN_Graph(TemporalGraph):
         Return:
             edge_ft
         """
-        device=edge.device
         if edge is None:
             return self.edge_ft
         else:
-            return self.edge_ft.to(device=device)[edge]
+            return self.edge_ft[edge]
 
     def get_temporal_neighbor(self,
             tar:torch.Tensor,
@@ -117,71 +121,72 @@ class TGN_Graph(TemporalGraph):
             tar: [n_tar,]
             tar_t: [n_tar,]
             n_neighbor: int
+
         Return:
             neighbor: [n_tar,n_neighbor]
+            neighbor_mask: [n_tar,n_neighbor]
             neighbor_t: [n_tar,n_neighbor]
             neighbor_ts: [n_tar,n_neighbor]
             neighbor_edge: [n_tar,n_neighbor]
         """
         device=tar.device
         n_tar=tar.size(0)
-        neighbor=torch.zeros(
-            (n_tar,n_neighbor),
-            dtype=torch.long,
-            device=device
-        )
-        neighbor_t=torch.zeros(
-            (n_tar,n_neighbor),
-            dtype=torch.float,
-            device=device
-        )
-        neighbor_ts=torch.zeros(
-            (n_tar,n_neighbor),
-            dtype=torch.float,
-            device=device
-        )
-        neighbor_edge=torch.zeros(
-            (n_tar,n_neighbor),
-            dtype=torch.long,
-            device=device
-        )
-        for i in range(n_tar):
-            tar_id=int(tar[i].item())
-            cut_time=float(tar_t[i].item())
 
-            neighbors=self.adj.get(tar_id,[])
-            times=self.adj_t.get(tar_id,[])
+        neighbor=torch.zeros((n_tar,n_neighbor),dtype=torch.long)
+        neighbor_edge=torch.zeros((n_tar,n_neighbor),dtype=torch.long)
+        neighbor_t=torch.zeros((n_tar,n_neighbor),dtype=torch.float32)
+        neighbor_ts=torch.zeros((n_tar,n_neighbor),dtype=torch.float32)
+        
 
-            if len(neighbors)==0:
+        tar=tar.detach().cpu().tolist()
+        tar_t=tar_t.detach().cpu().tolist()
+        for i,(tar_id,cut_time) in enumerate(zip(tar,tar_t)):
+            neighbors=self.adj[tar_id]
+            edges=self.adj_edge[tar_id]
+            times=self.adj_t[tar_id]
+            if neighbors.size==0:
                 continue
 
-            # t < cut_time 인 마지막 위치까지 선택
-            times_np=np.asarray(times,dtype=np.float32)
+            # t < cut_time 인 첫 위치
             cut_idx=np.searchsorted(
-                times_np,
+                times,
                 cut_time,
                 side="left"
             )
 
-            # 최근 num_neighbor개만 선택
+            # 최근 n_neighbor개 선택
             start_idx=max(0,cut_idx-n_neighbor)
             selected_neighbors=neighbors[start_idx:cut_idx]
+            selected_edges=edges[start_idx:cut_idx]
             selected_times=times[start_idx:cut_idx]
 
-            # 앞은 0 padding, 뒤에 실제 neighbor 저장
-            offset=n_neighbor-len(selected_neighbors)
-            for idx,((src,e_id),t) in enumerate(zip(selected_neighbors,selected_times)):
-                neighbor[i,offset+idx]=src
-                neighbor_t[i,offset+idx]=t
-                neighbor_ts[i,offset+idx]=abs(cut_time-t)
-                neighbor_edge[i,offset+idx]=e_id
+            n_selected=len(selected_neighbors)
+            if n_selected==0:
+                continue
 
-        # compute neighbor_mask
-        neighbor_mask=(neighbor!=0) # [B,n_neighbor], bool
+            # 앞쪽은 padding, 뒤쪽에 실제 neighbor 저장
+            offset=n_neighbor-n_selected
+            neighbor[i,offset:]=torch.as_tensor(
+                selected_neighbors,
+                dtype=torch.long
+            )
+            neighbor_edge[i,offset:]=torch.as_tensor(
+                selected_edges,
+                dtype=torch.long
+            )
+            neighbor_t[i,offset:]=torch.as_tensor(
+                selected_times,
+                dtype=torch.float32
+            )
+            neighbor_ts[i,offset:]=torch.as_tensor(
+                cut_time-selected_times,
+                dtype=torch.float32
+            )
+        neighbor_mask=neighbor!=0
         return {
-            "neighbor":neighbor, 
-            "neighbor_mask":neighbor_mask,
-            "neighbor_t":neighbor_t, 
-            "neighbor_ts":neighbor_ts, 
-            "neighbor_edge":neighbor_edge
+            "neighbor":neighbor.to(device=device),
+            "neighbor_mask":neighbor_mask.to(device=device),
+            "neighbor_t":neighbor_t.to(device=device),
+            "neighbor_ts":neighbor_ts.to(device=device),
+            "neighbor_edge":neighbor_edge.to(device=device)
         }

@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import networkx as nx
-from collections import deque,defaultdict
+from collections import deque
 from utils import RandomWalkUtils
 from .temporal_graph import TemporalGraph
 
@@ -33,10 +33,11 @@ class ATDGEB_Graph(TemporalGraph):
             graph_df=graph_df,
             bipartite=bipartite
         )
-        # set graph_df for training, train_adj, train_adj_t, train_edge_events
+        # set graph_df for training
         self.train_df=train_df
-        self.train_adj=defaultdict(list)
-        self.train_adj_t=defaultdict(list)
+        train_adj=[[] for _ in range(self.n_node+1)]
+        train_adj_edge=[[] for _ in range(self.n_node+1)]
+        train_adj_t=[[] for _ in range(self.n_node+1)]
         self.train_edge_events=[]
         for event in train_df.itertuples(index=False): # col: [u,i,ts,idx=edge_id]
             src=int(event.u)
@@ -44,12 +45,29 @@ class ATDGEB_Graph(TemporalGraph):
             t=float(event.t)
             edge_id=int(event.idx)
             # edge 양방향 저장
-            self.train_adj[dst].append((src,edge_id))
-            self.train_adj_t[dst].append(t)
-            self.train_adj[src].append((dst,edge_id))
-            self.train_adj_t[src].append(t)
+            train_adj[dst].append(src)
+            train_adj_edge[dst].append(edge_id)
+            train_adj_t[dst].append(t)
+            train_adj[src].append(dst)
+            train_adj_edge[src].append(edge_id)
+            train_adj_t[src].append(t)
             # edge event 저장
             self.train_edge_events.append((src,dst,t,edge_id))
+
+        # TemporalGraph의 adjacency 표현과 동일하게 노드별 NumPy
+        # 배열로 저장한다. train_df는 시간순 정렬되어 있다고 가정한다.
+        self.train_adj=[
+            np.asarray(values,dtype=np.int64)
+            for values in train_adj
+        ]
+        self.train_adj_edge=[
+            np.asarray(values,dtype=np.int64)
+            for values in train_adj_edge
+        ]
+        self.train_adj_t=[
+            np.asarray(values,dtype=np.float64)
+            for values in train_adj_t
+        ]
 
         # set train_n_node, train_n_event, train_max_t
         self.train_n_node=max(train_df["u"].max(),train_df["i"].max())
@@ -353,7 +371,7 @@ class ATDGEB_Graph(TemporalGraph):
         active_times=sorted(
             set(
                 float(timestamp)
-                for timestamp in self.train_adj_t.get(node,[])
+                for timestamp in self.train_adj_t[node]
             )
         )
         n_active_time=len(active_times)
@@ -500,10 +518,12 @@ class ATDGEB_Graph(TemporalGraph):
         # 주어진 시간 구간에 접촉한 이웃만 선택한다.
         candidate_neighbors=[] # 실제 샘플링에 사용할 이웃 목록
         candidate_set=set() # 같은 이웃이 중복으로 추가되는 것을 방지하는 집합
-        for (neighbor,_),timestamp in zip(
-                self.train_adj.get(node,[]),
-                self.train_adj_t.get(node,[])
+        for neighbor,timestamp in zip(
+                self.train_adj[node],
+                self.train_adj_t[node]
             ):
+            neighbor=int(neighbor)
+            timestamp=float(timestamp)
             if (
                 (
                     start_time<=timestamp
@@ -653,10 +673,12 @@ class ATDGEB_Graph(TemporalGraph):
             # 이동할 수 있는 가장 이른 arrival time을 구한다.
             eligible_arrival_times={}
             interval_neighbors=set()
-            for (neighbor,_),timestamp in zip(
-                    self.train_adj.get(current_node,[]),
-                    self.train_adj_t.get(current_node,[])
+            for neighbor,timestamp in zip(
+                    self.train_adj[current_node],
+                    self.train_adj_t[current_node]
                 ):
+                neighbor=int(neighbor)
+                timestamp=float(timestamp)
                 is_after_start=(
                     candidate_start<=timestamp
                     if arrival_time is None

@@ -151,8 +151,8 @@ class DataUtils:
             "max_u": graph_df["u"].max(),
             "node_dim": node_ft.shape[1],
             "edge_dim": edge_ft.shape[1],
-            "node_ft_np": node_ft,
-            "edge_ft_np": edge_ft
+            "node_ft": node_ft,
+            "edge_ft": edge_ft
         }
 
     @staticmethod

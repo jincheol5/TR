@@ -13,6 +13,7 @@ class DyGFormer_Module:
             node_seq_list:list,
             edge_seq_list:list,
             ts_seq_list:list,
+            max_seq_len:int,
             device:torch.device
         ):
         """
@@ -20,6 +21,7 @@ class DyGFormer_Module:
             node_seq_list: list of each node's history node sequence 
             edge_seq_list: list of each node's history edge sequence
             ts_seq_list: list of each node's history timespan sequence
+            max_seq_len: src/dst에 공통으로 적용할 최대 sequence 길이
         Return:
             node_seq: [B,max_seq_len] 
             node_seq_vec: [B,max_seq_len,node_dim] 
@@ -27,41 +29,28 @@ class DyGFormer_Module:
             ts_seq_vec: [B,max_seq_len,1]
         """
         batch_size=len(node_seq_list)
-        max_seq_len=max(
-            (len(seq) for seq in node_seq_list),
-            default=0
-        )
         node_seq=torch.zeros(
             (batch_size,max_seq_len),
-            dtype=torch.long,
-            device=device
+            dtype=torch.long
         )
         edge_seq=torch.zeros(
             (batch_size,max_seq_len),
-            dtype=torch.long,
-            device=device
+            dtype=torch.long
         )
         ts_seq=torch.zeros(
             (batch_size,max_seq_len),
-            dtype=torch.float,
-            device=device
+            dtype=torch.float
         )
         for i in range(batch_size):
             seq_len=len(node_seq_list[i])
-            node_seq[i,:seq_len]=torch.as_tensor(
-                node_seq_list[i],device=device
-            )
-            edge_seq[i,:seq_len]=torch.as_tensor(
-                edge_seq_list[i],device=device
-            )
-            ts_seq[i,:seq_len]=torch.as_tensor(
-                ts_seq_list[i],device=device
-            )
+            node_seq[i,:seq_len]=torch.as_tensor(node_seq_list[i])
+            edge_seq[i,:seq_len]=torch.as_tensor(edge_seq_list[i])
+            ts_seq[i,:seq_len]=torch.as_tensor(ts_seq_list[i])
         return {
-            "node_seq": node_seq, # [batch_size,max_seq_len]
-            "ts_seq": ts_seq.unsqueeze(-1), # [batch_size,max_seq_len]
-            "node_seq_vec": self.node_ft[node_seq], # [batch_size,max_seq_len,node_dim] 
-            "edge_seq_vec": self.edge_ft[edge_seq] # [batch_size,max_seq_len,edge_dim] 
+            "node_seq": node_seq.to(device=device), # [batch_size,max_seq_len]
+            "ts_seq": ts_seq.unsqueeze(-1).to(device=device), # [batch_size,max_seq_len]
+            "node_seq_vec": self.node_ft[node_seq].to(device=device), # [batch_size,max_seq_len,node_dim]
+            "edge_seq_vec": self.edge_ft[edge_seq].to(device=device) # [batch_size,max_seq_len,edge_dim]
         }
 
     def get_co_occurrence_vec(self,
@@ -107,7 +96,7 @@ class DyGFormer_Module:
                 dst_co_vec[b,idx,1]=(each_dst_seq==node).sum()
         return {
             "src_co_vec": src_co_vec, # [batch_size,max_src_seq_len,2]
-            "dst_co_vec": dst_co_vec # [batch_size,max_dst_seq_len,2] 
+            "dst_co_vec": dst_co_vec # [batch_size,max_dst_seq_len,2]
         }
 
     def get_patching_vec(self,

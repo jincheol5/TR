@@ -14,7 +14,7 @@ class DyGFormer(nn.Module):
             common_dim:int,
             patch_size:int,
             graph:DyGFormer_Graph,
-            max_n_neighbor:int,
+            n_neighbor:int,
             n_layer:int,
             n_head:int
         ):
@@ -28,7 +28,7 @@ class DyGFormer(nn.Module):
         self.common_dim=common_dim
         self.patch_size=patch_size
         self.graph=graph
-        self.max_n_neighbor=max_n_neighbor
+        self.n_neighbor=n_neighbor
         self.n_layer=n_layer
         self.n_head=n_head
 
@@ -120,7 +120,7 @@ class DyGFormer(nn.Module):
         src_result=self.graph.get_history_seq(
             node=src,
             event_t=query_t,
-            max_n_neighbor=self.max_n_neighbor
+            n_neighbor=self.n_neighbor
         )
         src_node_seq_list=src_result["node"]
         src_edge_seq_list=src_result["edge"]
@@ -129,17 +129,28 @@ class DyGFormer(nn.Module):
         dst_result=self.graph.get_history_seq(
             node=dst,
             event_t=query_t,
-            max_n_neighbor=self.max_n_neighbor
+            n_neighbor=self.n_neighbor
         )
         dst_node_seq_list=dst_result["node"]
         dst_edge_seq_list=dst_result["edge"]
         dst_ts_seq_list=dst_result["ts"]
 
-        ### 2. get padded sequence 
+        ### 2. get padded sequence
+        max_seq_len=max(
+            max(
+                len(seq)
+                for seq in src_node_seq_list
+            ),
+            max(
+                len(seq)
+                for seq in dst_node_seq_list
+            )
+        )
         src_result=self.module.get_padded_seq_vec(
             node_seq_list=src_node_seq_list,
             edge_seq_list=src_edge_seq_list,
             ts_seq_list=src_ts_seq_list,
+            max_seq_len=max_seq_len,
             device=device
         )
         src_seq=src_result["node_seq"]
@@ -151,6 +162,7 @@ class DyGFormer(nn.Module):
             node_seq_list=dst_node_seq_list,
             edge_seq_list=dst_edge_seq_list,
             ts_seq_list=dst_ts_seq_list,
+            max_seq_len=max_seq_len,
             device=device
         )
         dst_seq=dst_result["node_seq"]
@@ -173,8 +185,10 @@ class DyGFormer(nn.Module):
         ### 5. apply NCoE
         src_co_vec_0=src_co_vec[:,:,0:1] 
         src_co_vec_1=src_co_vec[:,:,1:2] 
+
         dst_co_vec_0=dst_co_vec[:,:,0:1] 
         dst_co_vec_1=dst_co_vec[:,:,1:2] 
+
         co_vec=torch.concat(
             [
                 src_co_vec_0,
@@ -189,7 +203,7 @@ class DyGFormer(nn.Module):
             co_vec,
             chunks=4,
             dim=0
-        ) 
+        )
         src_co_vec=src_co_vec_0+src_co_vec_1 # [B,max_seq_len,co_dim]
         dst_co_vec=dst_co_vec_0+dst_co_vec_1 # [B,max_seq_len,co_dim]
 

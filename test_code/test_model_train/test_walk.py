@@ -3,8 +3,8 @@ import torch
 from torch.utils.data import DataLoader
 from utils import DataUtils,TrainUtils,TRDataset
 from graph import CTDNE_Graph,ATDGEB_Graph
-from model import CTDNE_TR,ATDGEB_TR
-from model_train import ModelTrainer
+from model import CTDNE,ATDGEB
+from model_train import WalkModelTrainer
 
 """
 << Test >> 
@@ -99,9 +99,9 @@ def test_fn(**kwargs):
             print(f"Finish to generate test sample!")
 
             # Dataset
-            train_sample_dataset=TRDataset(sample=train_sample)
-            val_sample_dataset=TRDataset(sample=val_sample)
-            test_sample_dataset=TRDataset(sample=test_sample)
+            train_sample_dataset=TRDataset(sample=train_sample,query_time=train_query_time)
+            val_sample_dataset=TRDataset(sample=val_sample,query_time=val_query_time)
+            test_sample_dataset=TRDataset(sample=test_sample,query_time=test_query_time)
 
             # DataLoader, query_time 기준으로 생성되었기 때문에 shuffle 가능
             train_sample_loader=DataLoader(dataset=train_sample_dataset,batch_size=100,shuffle=True)
@@ -109,19 +109,19 @@ def test_fn(**kwargs):
             test_sample_loader=DataLoader(dataset=test_sample_dataset,batch_size=100,shuffle=True)
 
             ### set model and train
-            model=CTDNE_TR(
+            model=CTDNE(
                 embed_dim=embed_dim,
                 latent_dim=latent_dim,
                 window_size=window_size,
                 graph=graph
             )
-            model=ModelTrainer.train_walk_model(
+            model=WalkModelTrainer.train_model(
                 model=model,
                 train_sample_loader=train_sample_loader,
                 val_sample_loader=val_sample_loader,
                 **model_config
             )
-            acc=ModelTrainer.evaluate_walk_model(
+            acc=WalkModelTrainer.evaluate_model(
                 model=model,
                 sample_loader=test_sample_loader
             )
@@ -207,9 +207,9 @@ def test_fn(**kwargs):
             print(f"Finish to generate test sample!")
 
             # Dataset
-            train_sample_dataset=TRDataset(sample=train_sample)
-            val_sample_dataset=TRDataset(sample=val_sample)
-            test_sample_dataset=TRDataset(sample=test_sample)
+            train_sample_dataset=TRDataset(sample=train_sample,query_time=train_query_time)
+            val_sample_dataset=TRDataset(sample=val_sample,query_time=val_query_time)
+            test_sample_dataset=TRDataset(sample=test_sample,query_time=test_query_time)
 
             # DataLoader, query_time 기준으로 생성되었기 때문에 shuffle 가능
             train_sample_loader=DataLoader(dataset=train_sample_dataset,batch_size=100,shuffle=True)
@@ -217,19 +217,19 @@ def test_fn(**kwargs):
             test_sample_loader=DataLoader(dataset=test_sample_dataset,batch_size=100,shuffle=True)
 
             ### set model and train
-            model=ATDGEB_TR(
+            model=ATDGEB(
                 embed_dim=embed_dim,
                 latent_dim=latent_dim,
                 window_size=window_size,
                 graph=graph
             )
-            model=ModelTrainer.train_walk_model(
+            model=WalkModelTrainer.train_model(
                 model=model,
                 train_sample_loader=train_sample_loader,
                 val_sample_loader=val_sample_loader,
                 **model_config
             )
-            acc=ModelTrainer.evaluate_walk_model(
+            acc=WalkModelTrainer.evaluate_model(
                 model=model,
                 sample_loader=test_sample_loader
             )

@@ -111,20 +111,18 @@ class WalkModelTrainer:
             """
             Validate Model
             """
-            acc=WalkModelTrainer.evaluate_model(
+            val_result=WalkModelTrainer.evaluate_model(
                 model=model,
                 sample_loader=val_sample_loader,
                 **kwargs
             )
-            print(f"Validate ACC: {acc}")
+            val_acc=val_result["acc"]
+            print(f"Validate ACC: {val_acc}")
 
             """
             Check Early Stop
             """
-            val_loss=WalkModelTrainer.compute_validate_loss(
-                model=model,
-                val_sample_loader=val_sample_loader
-            )
+            val_loss=val_result["loss"]
             print(f"{epoch+1} epoch Validate Loss: {val_loss}")
             if kwargs["early_stop"]:
                 pre_model=early_stop(
@@ -138,7 +136,7 @@ class WalkModelTrainer:
         return model
 
     @staticmethod
-    def compute_validate_loss(
+    def validate_model(
             model,
             val_sample_loader:list
         ):
@@ -152,9 +150,10 @@ class WalkModelTrainer:
         model.eval()
 
         """
-        compute validate loss
+        compute validate loss and acc
         """
         loss_list=[]
+        acc_list=[]
         with torch.no_grad():
             for sample in tqdm(val_sample_loader,desc=f"Compute Val_Loss..."):
                 src=torch.cat([
@@ -181,14 +180,24 @@ class WalkModelTrainer:
 
                 ### Loss
                 criterion=nn.BCEWithLogitsLoss()
-                loss=criterion(pred_logit,label)
-                loss_list.append(loss)
-        return torch.stack(loss_list).mean().item()
+                batch_loss=criterion(pred_logit,label)
+                loss_list.append(batch_loss)
+
+                ### compute ACC
+                batch_acc=Metric.compute_accuracy(
+                    pred_logit=pred_logit,
+                    label=label
+                )
+                acc_list.append(batch_acc)
+        return {
+            "loss":torch.stack(loss_list).mean().item(),
+            "acc":sum(acc_list)/len(acc_list)
+        }
 
     @staticmethod
     def evaluate_model(
             model:nn.Module,
-            sample_loader:list,
+            test_sample_loader:list,
             **kwargs
         ):
         """
@@ -205,7 +214,7 @@ class WalkModelTrainer:
         acc_list=[]
         with torch.no_grad():
             for sample in tqdm(
-                    sample_loader,
+                    test_sample_loader,
                     desc=f"Evaluating..."
                 ):
                 src=torch.cat([
@@ -236,5 +245,4 @@ class WalkModelTrainer:
                     label=label
                 )
                 acc_list.append(batch_acc)
-        acc=sum(acc_list)/len(acc_list)
-        return acc
+        return sum(acc_list)/len(acc_list)

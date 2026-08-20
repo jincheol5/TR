@@ -148,7 +148,7 @@ class GraphEmbeddingModule(EmbeddingModule):
         """
         tar_ft=self.graph.get_node_ft(node=tar) # [n_tar,node_dim]
         if self.use_memory:
-            tar_mem=self.memory.get_mem_ft(node=tar)
+            tar_mem=self.memory.get_mem_vec(node=tar)
             tar_ft=torch.concat(
                 [tar_ft,tar_mem],
                 dim=-1

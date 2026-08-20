@@ -26,6 +26,7 @@ class GNNModelTrainer:
         else:
             device=torch.device("cpu")
         model=model.to(device)
+        model.graph.to_device(device=device)
 
         if kwargs["optimizer"]=="adam":
             optimizer=torch.optim.Adam(
@@ -63,23 +64,10 @@ class GNNModelTrainer:
                     total=len(sample_list),
                     desc=f"Training epoch: {epoch+1}..."
                 ):
-
-                src=torch.cat([
-                    sample["pos_src"],
-                    sample["neg_src"]
-                ])
-                dst=torch.cat([
-                    sample["pos_dst"],
-                    sample["neg_dst"]
-                ])
-                query_t=torch.cat([
-                    sample["pos_pair_t"],
-                    sample["neg_pair_t"]
-                ]).float()
-                label=torch.cat([
-                    sample["pos_label"],
-                    sample["neg_label"]
-                ]).float()
+                src=sample["src"]
+                dst=sample["dst"]
+                query_t=sample["query_t"]
+                label=sample["label"]
                 src=src.to(device)
                 dst=dst.to(device)
                 query_t=query_t.to(device)
@@ -93,7 +81,7 @@ class GNNModelTrainer:
                         event_edge=event_edge.to(device)
                         event={
                             "src":event_src,
-                            "dst":dst,
+                            "dst":event_dst,
                             "event_t":event_t,
                             "edge":event_edge
                         }
@@ -124,23 +112,19 @@ class GNNModelTrainer:
             """
             Validate Model
             """
-            acc=GNNModelTrainer.evaluate_model(
-                model=model,
-                data_loader=val_loader,
-                sample_loader=val_sample_loader,
-                **kwargs
-            )
-            print(f"Validate ACC: {acc}")
-
-            """
-            Check Early Stop
-            """
-            val_loss=GNNModelTrainer.compute_validate_loss(
+            val_result=GNNModelTrainer.validate_model(
                 model=model,
                 val_loader=val_loader,
                 val_sample_loader=val_sample_loader,
                 **kwargs
             )
+            val_acc=val_result["acc"]
+            print(f"Validate ACC: {val_acc}")
+
+            """
+            Check Early Stop
+            """
+            val_loss=val_result["loss"]
             print(f"{epoch+1} epoch Validate Loss: {val_loss}")
             if kwargs["early_stop"]:
                 pre_model=early_stop(
@@ -154,12 +138,14 @@ class GNNModelTrainer:
         return model
 
     @staticmethod
-    def compute_validate_loss(
+    def update_model_memory(
             model:nn.Module,
-            val_loader:DataLoader,
-            val_sample_loader:DataLoader,
-            **kwargs
+            data_loader:DataLoader
         ):
+        """
+        Memory-based GNN 평가를 위한 memory update.
+        test_df 에 대해 평가 시 val_df에 대해 먼저 memory update를 수행해야 한다.
+        """
         if torch.cuda.is_available():
             device=torch.device("cuda")
         elif torch.backends.mps.is_available():
@@ -167,25 +153,54 @@ class GNNModelTrainer:
         else:
             device=torch.device("cpu")
         model.to(device)
+        model.graph.to_device(device=device)
+        model.eval()
+
+        with torch.no_grad():
+            for event_src,event_dst,event_t,event_edge in tqdm(data_loader,desc=f"update memory..."):
+                event_src=event_src.to(device)
+                event_dst=event_dst.to(device)
+                event_t=event_t.to(device)
+                event_edge=event_edge.to(device)
+                model.update_model_memory(
+                    event_src=event_src,
+                    event_dst=event_dst,
+                    event_t=event_t,
+                    event_edge=event_edge
+                ) # memory update만 수행
+        return model
+
+    @staticmethod
+    def validate_model(
+            model:nn.Module,
+            val_loader:DataLoader,
+            val_sample_loader:DataLoader,
+            **kwargs
+        ):
+        """
+        Validate Loss and ACC 계산
+        """
+        if torch.cuda.is_available():
+            device=torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device=torch.device("mps")
+        else:
+            device=torch.device("cpu")
+        model.to(device)
+        model.graph.to_device(device=device)
         model.eval()
 
         """
-        compute validate loss
+        compute validate loss and acc
         """
         loss_list=[]
+        acc_list=[]
         with torch.no_grad():
             if kwargs["model_name"] in ("TGN"):
-                for event_src,event_dst,event_t,event_edge in tqdm(val_loader,desc=f"update memory..."):
-                    event_src=event_src.to(device)
-                    event_dst=event_dst.to(device)
-                    event_t=event_t.to(device)
-                    event_edge=event_edge.to(device)
-                    model.update_model_memory(
-                        event_src=event_src,
-                        event_dst=event_dst,
-                        event_t=event_t,
-                        event_edge=event_edge
-                    ) # memory update만 수행
+                model=GNNModelTrainer.update_model_memory(
+                    model=model,
+                    data_loader=val_loader
+                )
             
             for sample in tqdm(val_sample_loader,desc=f"Compute Val_Loss..."):
                 src=torch.cat([
@@ -218,17 +233,31 @@ class GNNModelTrainer:
                 ### Loss
                 pred_logit=pred_logit.squeeze(-1) # -> [B,]
                 criterion=nn.BCEWithLogitsLoss()
-                loss=criterion(pred_logit,label)
-                loss_list.append(loss)
-        return torch.stack(loss_list).mean().item()
+                batch_loss=criterion(pred_logit,label)
+                loss_list.append(batch_loss)
+
+                ### ACC
+                pred_logit=pred_logit.squeeze(-1) # -> [B,]
+                batch_acc=Metric.compute_accuracy(
+                    pred_logit=pred_logit,
+                    label=label
+                )
+                acc_list.append(batch_acc)
+        return {
+            "loss":torch.stack(loss_list).mean().item(),
+            "acc":sum(acc_list)/len(acc_list)
+        }
 
     @staticmethod
     def evaluate_model(
             model:nn.Module,
-            data_loader:DataLoader,
-            sample_loader:list,
+            test_loader:DataLoader,
+            test_sample_loader:list,
             **kwargs
         ):
+        """
+        Memory-based GNN의 경우 evaluate_model 전에 val_loader에 대해 memory update 수행되어야 함.
+        """
         if torch.cuda.is_available():
             device=torch.device("cuda")
         elif torch.backends.mps.is_available():
@@ -236,24 +265,18 @@ class GNNModelTrainer:
         else:
             device=torch.device("cpu")
         model.to(device)
+        model.graph.to_device(device=device)
         model.eval()
 
         acc_list=[]
         with torch.no_grad():
             if kwargs["model_name"] in ("TGN"):
-                for event_src,event_dst,event_t,event_edge in tqdm(data_loader,desc=f"update memory..."):
-                    event_src=event_src.to(device)
-                    event_dst=event_dst.to(device)
-                    event_t=event_t.to(device)
-                    event_edge=event_edge.to(device)
-                    model.update_model_memory(
-                        event_src=event_src,
-                        event_dst=event_dst,
-                        event_t=event_t,
-                        event_edge=event_edge
-                    ) # memory update만 수행
+                model=GNNModelTrainer.update_model_memory(
+                    model=model,
+                    data_loader=test_loader
+                )
 
-            for sample in tqdm(sample_loader,desc=f"Evaluating..."):
+            for sample in tqdm(test_sample_loader,desc=f"Evaluating..."):
                 src=torch.cat([
                     sample["pos_src"],
                     sample["neg_src"]
@@ -280,13 +303,12 @@ class GNNModelTrainer:
                     dst=dst,
                     query_t=query_t
                 ) # [B,1]
-                
-                ### compute ACC
+
+                ### ACC
                 pred_logit=pred_logit.squeeze(-1) # -> [B,]
                 batch_acc=Metric.compute_accuracy(
                     pred_logit=pred_logit,
                     label=label
                 )
                 acc_list.append(batch_acc)
-        acc=sum(acc_list)/len(acc_list)
-        return acc
+        return sum(acc_list)/len(acc_list)

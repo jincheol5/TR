@@ -47,11 +47,6 @@ class DyGFormer_Graph(TGN_Graph):
             edge_seq_list: list of each node's history edge sequence
             ts_seq_list: list of each node's history timespan sequence
         """
-        if n_neighbor<0:
-            raise ValueError(
-                f"n_neighbor must be non-negative: {n_neighbor}"
-            )
-
         node_seq_list=[]
         edge_seq_list=[]
         ts_seq_list=[]

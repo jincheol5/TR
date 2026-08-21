@@ -17,6 +17,8 @@ class DyGFormer_Module:
             device:torch.device
         ):
         """
+        CPU에서 수행
+
         Input:
             node_seq_list: list of each node's history node sequence 
             edge_seq_list: list of each node's history edge sequence
@@ -47,56 +49,60 @@ class DyGFormer_Module:
             edge_seq[i,:seq_len]=torch.as_tensor(edge_seq_list[i])
             ts_seq[i,:seq_len]=torch.as_tensor(ts_seq_list[i])
         return {
-            "node_seq": node_seq.to(device=device), # [batch_size,max_seq_len]
-            "ts_seq": ts_seq.unsqueeze(-1).to(device=device), # [batch_size,max_seq_len]
-            "node_seq_vec": self.node_ft[node_seq].to(device=device), # [batch_size,max_seq_len,node_dim]
-            "edge_seq_vec": self.edge_ft[edge_seq].to(device=device) # [batch_size,max_seq_len,edge_dim]
+            "node_seq": node_seq, # [batch_size,max_seq_len]
+            "ts_seq": ts_seq.unsqueeze(-1), # [batch_size,max_seq_len]
+            "node_seq_vec": self.node_ft[node_seq], # [batch_size,max_seq_len,node_dim]
+            "edge_seq_vec": self.edge_ft[edge_seq] # [batch_size,max_seq_len,edge_dim]
         }
 
-    def get_co_occurrence_vec(self,
+    def get_co_occurrence_vec(
+            self,
             src_seq:torch.Tensor,
             dst_seq:torch.Tensor
         ):
         """
         Compute Neighbor Co-occurrence Vector.
+        CPU에서 수행
 
-        node = 0일 때 continue하기 때문에 padding node의 co-occurrence는 항상 [0,0]으로 유지한다.
-
+        torch.bincount(): 0 이상의 정수 텐서에서 각 정수가 몇 번 등장했는지 세는 함수
+        
         Input:
-            src_seq: [batch_size,max_src_seq_len,]
-            dst_seq: [batch_size,max_dst_seq_len,]
-        Return: 
-            src_co_vec: [batch_size,max_src_seq_len,2]
-            dst_co_vec: [batch_size,max_dst_seq_len,2] 
+            src_seq: [B, src_len]
+            dst_seq: [B, dst_len]
+
+        Return:
+            src_co_vec: [B, src_len, 2]
+            dst_co_vec: [B, dst_len, 2]
         """
-        device=src_seq.device
-        batch_size=src_seq.size(0)
-        src_co_vec=torch.zeros(
-            (*src_seq.shape,2),
-            dtype=torch.float32,
-            device=device
-        )
-        dst_co_vec=torch.zeros(
-            (*dst_seq.shape,2),
-            dtype=torch.float32,
-            device=device
-        )
-        for b in range(batch_size):
-            each_src_seq=src_seq[b]
-            each_dst_seq=dst_seq[b]
-            for idx,node in enumerate(each_src_seq):
-                if node==0:
-                    continue
-                src_co_vec[b,idx,0]=(each_src_seq==node).sum()
-                src_co_vec[b,idx,1]=(each_dst_seq==node).sum()
-            for idx,node in enumerate(each_dst_seq):
-                if node==0:
-                    continue
-                dst_co_vec[b,idx,0]=(each_src_seq==node).sum()
-                dst_co_vec[b,idx,1]=(each_dst_seq==node).sum()
+        src_co_vec=[]
+        dst_co_vec=[]
+        for src,dst in zip(src_seq, dst_seq):
+            max_id=torch.max(src.max(),dst.max()).item()+1
+            src_count=torch.bincount(src,minlength=max_id)
+            dst_count=torch.bincount(dst,minlength=max_id)
+
+            src_co_vec.append(
+                torch.stack([
+                    src_count[src],
+                    dst_count[src]
+                ], dim=-1)
+            )
+            dst_co_vec.append(
+                torch.stack([
+                    src_count[dst],
+                    dst_count[dst]
+                ], dim=-1)
+            )
+
+        src_co_vec=torch.stack(src_co_vec).float()
+        dst_co_vec=torch.stack(dst_co_vec).float()
+
+        # padding node
+        src_co_vec[src_seq==0]=0
+        dst_co_vec[dst_seq==0]=0
         return {
-            "src_co_vec": src_co_vec, # [batch_size,max_src_seq_len,2]
-            "dst_co_vec": dst_co_vec # [batch_size,max_dst_seq_len,2]
+            "src_co_vec": src_co_vec,
+            "dst_co_vec": dst_co_vec
         }
 
     def get_patching_vec(self,

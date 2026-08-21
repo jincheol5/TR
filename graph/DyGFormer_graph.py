@@ -51,8 +51,8 @@ class DyGFormer_Graph(TGN_Graph):
         edge_seq_list=[]
         ts_seq_list=[]
         for node_id,cut_time in zip(
-                node.detach().cpu().numpy(),
-                event_t.detach().cpu().numpy()
+                node.cpu().numpy(),
+                event_t.cpu().numpy()
             ):
             node_id=int(node_id)
             cut_time=float(cut_time)

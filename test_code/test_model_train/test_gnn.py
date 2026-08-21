@@ -348,7 +348,9 @@ def test_fn(**kwargs):
             n_layer=2
             n_neighbor=10
             n_head=4
+            max_seq_len=10
             patch_size=5
+            
 
             # 모델 학습 관련
             latent_dim=32
@@ -356,7 +358,7 @@ def test_fn(**kwargs):
             output_dim=32
             co_dim=32
             common_dim=32
-            epoch=1
+            epoch=100
             lr=0.0005
             optimizer=f"adam"
             early_stop=True
@@ -374,6 +376,7 @@ def test_fn(**kwargs):
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
+                "max_seq_len":max_seq_len,
                 "patch_size":patch_size,
                 "latent_dim":latent_dim,
                 "time_dim":time_dim,
@@ -396,6 +399,7 @@ def test_fn(**kwargs):
                 output_dim=output_dim,
                 co_dim=co_dim,
                 common_dim=common_dim,
+                max_seq_len=max_seq_len,
                 patch_size=patch_size,
                 graph=graph,
                 n_neighbor=n_neighbor,

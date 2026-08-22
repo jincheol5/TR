@@ -8,17 +8,17 @@ class TemporalGraphAttn(nn.Module):
     def __init__(self,
             input_dim:int,
             edge_dim:int,
-            latent_dim:int,
-            output_dim:int,
             time_dim:int,
+            latent_dim:int,
+            embed_dim:int,
             n_head:int=1
         ):
         super().__init__()
         self.input_dim=input_dim
         self.edge_dim=edge_dim
-        self.latent_dim=latent_dim
-        self.output_dim=output_dim
         self.time_dim=time_dim
+        self.latent_dim=latent_dim
+        self.embed_dim=embed_dim
 
         self.q_dim=input_dim+time_dim
         self.kv_dim=input_dim+edge_dim+time_dim
@@ -39,7 +39,7 @@ class TemporalGraphAttn(nn.Module):
             nn.ReLU(),
             nn.Linear(
                 in_features=self.latent_dim,
-                out_features=self.output_dim
+                out_features=self.embed_dim
             )
         )
     def forward(self,
@@ -59,7 +59,7 @@ class TemporalGraphAttn(nn.Module):
             neighbor_edge_ft: [B,K,edge_dim]
             neighbor_mask: [B,K]
         Output:
-            updated tar_vec: # [B,output_dim]
+            updated tar_vec: # [B,embed_dim]
         """
         ### set init
         tar_vec=tar_vec.unsqueeze(dim=1) # -> [B,1,input_dim]
@@ -112,7 +112,7 @@ class TemporalGraphAttn(nn.Module):
             [attn_output,tar_vec],
             dim=-1
         ) # -> [B,q_dim||input_dim]
-        output=self.MLPs(ffn_input) # [B,output_dim]
+        output=self.MLPs(ffn_input) # [B,embed_dim]
         return output
 
 class TransformerEncoderBlock(nn.Module):

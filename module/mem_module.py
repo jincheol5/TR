@@ -25,6 +25,7 @@ class Memory(nn.Module):
             torch.zeros(n_node+1),
             requires_grad=False
         )
+        self.init_memory_state()
     
     def init_memory_state(self):
         """
@@ -34,7 +35,7 @@ class Memory(nn.Module):
         self.mem_t.data.zero_()
 
     def get_mem_vec(self,
-            node:torch.Tensor
+            node:torch.Tensor|None
         ):
         """
         Input:
@@ -42,7 +43,24 @@ class Memory(nn.Module):
         Output:
             mem_vec: [N,mem_dim]
         """
-        return self.mem_vec[node]
+        if node is None:
+            return self.mem_vec
+        else:
+            return self.mem_vec[node]
+
+    def get_mem_t(self,
+            node:torch.Tensor|None
+        ):
+        """
+        Input:
+            node: [N,]
+        Output:
+            mem_vec: [N,]
+        """
+        if node is None:
+            return self.mem_t
+        else:
+            return self.mem_t[node]
 
     def get_node_timespan(self,
             node:torch.Tensor,
@@ -84,25 +102,23 @@ class MemoryUpdater(nn.Module):
     def __init__(self,
             mem_dim:int,
             edge_dim:int,
-            msg_dim:int,
             time_dim:int,
+            msg_dim:int,
             time_encoder:TimeEncoder,
             graph:TGN_Graph,
-            memory:Memory,
             msg_fn:Literal["concat","mlp"]="concat",
             aggr_fn:Literal["last","mean"]="last"
         ):
         super().__init__()
         self.mem_dim=mem_dim
         self.edge_dim=edge_dim
-        self.msg_dim=msg_dim
         self.time_dim=time_dim
+        self.msg_dim=msg_dim
         self.msg_fn=msg_fn
         self.aggr_fn=aggr_fn
 
         # data
         self.graph=graph
-        self.memory=memory
 
         # module
         self.time_encoder=time_encoder
@@ -134,7 +150,9 @@ class MemoryUpdater(nn.Module):
             src,
             dst,
             edge,
-            event_t
+            event_t,
+            mem_vec,
+            mem_t
         ):
         """
         Input:
@@ -142,16 +160,22 @@ class MemoryUpdater(nn.Module):
             dst: [B,]
             edge: [B,]
             event_t: [B,]
+            mem_vec: [N,mem_dim]
+            mem_t: [N,]
         Output:
             src_msg: [B,msg_dim]
             dst_msg: [B,msg_dim]
         """
-        src_mem=self.memory.get_mem_vec(node=src)
-        src_ts=self.memory.get_node_timespan(node=src,event_t=event_t)
+        src_mem=mem_vec[src]
+        src_ts=torch.abs(
+            event_t-mem_t[src]
+        ).unsqueeze(-1)
         src_ts_vec=self.time_encoder(src_ts)
 
-        dst_mem=self.memory.get_mem_vec(node=dst)
-        dst_ts=self.memory.get_node_timespan(node=dst,event_t=event_t)
+        dst_mem=mem_vec[dst]
+        dst_ts=torch.abs(
+            event_t-mem_t[dst]
+        ).unsqueeze(-1)
         dst_ts_vec=self.time_encoder(dst_ts)
 
         edge_ft=self.graph.get_edge_ft(edge=edge)
@@ -252,14 +276,13 @@ class MemoryUpdater(nn.Module):
         aggr_event_t=torch.stack(aggr_event_t,dim=0) # [unique_N,]
         return aggr_node,aggr_msg,aggr_event_t
     
-    def update_memory_implement(self,aggr_node,aggr_msg,aggr_event_t):
-        return NotImplemented
-
     def update_memory(self,
             src,
             dst,
             edge,
-            event_t
+            event_t,
+            mem_vec,
+            mem_t
         ):
         """
         자식 class의 update_memory 실행으로 자식 class에서 구현된 update_memory_implement 호출
@@ -269,12 +292,16 @@ class MemoryUpdater(nn.Module):
             tar: [B,]
             edge: [B,]
             event_t: [B,]
+            mem_vec: [N,mem_dim]
+            mem_t: [N,]
         """
         src_msg,dst_msg=self.create_message(
             src=src,
             dst=dst,
             edge=edge,
-            event_t=event_t
+            event_t=event_t,
+            mem_vec=mem_vec,
+            mem_t=mem_t
         )
         aggr_node,aggr_msg,aggr_event_t=self.aggregate_message(
             src=src,
@@ -283,31 +310,38 @@ class MemoryUpdater(nn.Module):
             dst_msg=dst_msg,
             event_t=event_t
         )
-        updated_mem_vec=self.update_memory_implement(
+        updated_result=self.update_memory_implement(
             aggr_node=aggr_node,
             aggr_msg=aggr_msg,
-            aggr_event_t=aggr_event_t
+            aggr_event_t=aggr_event_t,
+            mem_vec=mem_vec
         )
-        return updated_mem_vec # [unique_N,mem_dim]
+        return updated_result
+
+    def update_memory_implement(self,
+            aggr_node,
+            aggr_msg,
+            aggr_event_t,
+            mem_vec
+        ):
+        return NotImplemented
 
 class GRUMemoryUpdater(MemoryUpdater):
     def __init__(self,
             mem_dim:int,
             edge_dim:int,
-            msg_dim:int,
             time_dim:int,
+            msg_dim:int,
             time_encoder:TimeEncoder,
-            memory:Memory,
             msg_fn:Literal["concat","mlp"]="concat",
             aggr_fn:Literal["last","mean"]="last"
         ):
         super(GRUMemoryUpdater,self).__init__(
             mem_dim=mem_dim,
             edge_dim=edge_dim,
-            msg_dim=msg_dim,
             time_dim=time_dim,
+            msg_dim=msg_dim,
             time_encoder=time_encoder,
-            memory=memory,
             msg_fn=msg_fn,
             aggr_fn=aggr_fn
         )
@@ -320,18 +354,28 @@ class GRUMemoryUpdater(MemoryUpdater):
             hidden_size=mem_dim
         )
 
-    def update_memory_implement(self,aggr_node,aggr_msg,aggr_event_t):
+    def update_memory_implement(self,
+            aggr_node,
+            aggr_msg,
+            aggr_event_t,
+            mem_vec
+        ):
         """
         Input:
             aggr_node: [unique_N,]
             aggr_msg: [unique_N,msg_dim]
             aggr_event_t: [unique_N,]
+            mem_vec: [N,mem_dim]
+        Return:
+            node: [unique_N,]
+            mem_vec: [unique_N,mem_dim]
+            mem_t: [unique_N,]
         """
-        pre_mem_vec=self.memory.get_mem_vec(node=aggr_node) # [unique_N,mem_dim]
+        pre_mem_vec=mem_vec[aggr_node] # [unique_N,mem_dim]
         updated_mem_vec=self.memory_updater(aggr_msg,pre_mem_vec) # [unique_N,mem_dim]
-        self.memory.update_memory_state(
-            node=aggr_node,
-            mem_vec=updated_mem_vec,
-            event_t=aggr_event_t
-        )
-        return updated_mem_vec # [unique_N,mem_dim]
+        return {
+            "node":aggr_node, # [unique_N]
+            "mem_vec":updated_mem_vec, # [unique_N,mem_dim]
+            "mem_t":aggr_event_t # [unique_N,]
+        }
+

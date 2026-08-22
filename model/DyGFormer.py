@@ -9,7 +9,7 @@ class DyGFormer(nn.Module):
             edge_dim:int,
             latent_dim:int,
             time_dim:int,
-            output_dim:int,
+            embed_dim:int,
             co_dim:int,
             common_dim:int,
             graph:DyGFormer_Graph,
@@ -24,7 +24,7 @@ class DyGFormer(nn.Module):
         self.edge_dim=edge_dim
         self.latent_dim=latent_dim
         self.time_dim=time_dim
-        self.output_dim=output_dim
+        self.embed_dim=embed_dim
         self.co_dim=co_dim
         self.common_dim=common_dim
         self.graph=graph
@@ -86,28 +86,23 @@ class DyGFormer(nn.Module):
         # Time-aware Node Representation
         self.output_layer=nn.Linear(
             in_features=4*common_dim,
-            out_features=output_dim
+            out_features=embed_dim
         )
 
         # decoder
-        self.decoder=nn.Sequential(
-            nn.Linear(
-                in_features=output_dim+output_dim,
-                out_features=latent_dim
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                in_features=latent_dim,
-                out_features=1
-            )
+        self.decoder=nn.Linear(
+            in_features=embed_dim+embed_dim,
+            out_features=1
         )
 
     def forward(self,
             src:torch.Tensor,
             dst:torch.Tensor,
-            query_t:torch.Tensor,
+            event_t:torch.Tensor,
         ):
         """
+        TR sample에 대한 Temporal Reachability 예측.
+        
         < STEP > 
         In CPU:
             1. src, dst에 대한 history sequence 가져오기.
@@ -120,10 +115,10 @@ class DyGFormer(nn.Module):
             8. patch_encoder로 마지막 차원 통일.
             9. ... 
 
-        Input: sampling 된 pos/neg pair의 src,dst,query_time
+        Input: sampling 된 pos/neg pair의 src,dst,event_t (=query time)
             src: [B,] 
             dst: [B,]
-            query_t: [B,]
+            event_t: [B,]
         Return:
             pred_logit: [B,1]
         """
@@ -133,7 +128,7 @@ class DyGFormer(nn.Module):
         ### 1. get sequence data
         src_result=self.graph.get_history_seq(
             node=src,
-            event_t=query_t,
+            event_t=event_t,
             n_neighbor=self.n_neighbor
         )
         src_node_seq_list=src_result["node"]
@@ -142,7 +137,7 @@ class DyGFormer(nn.Module):
 
         dst_result=self.graph.get_history_seq(
             node=dst,
-            event_t=query_t,
+            event_t=event_t,
             n_neighbor=self.n_neighbor
         )
         dst_node_seq_list=dst_result["node"]

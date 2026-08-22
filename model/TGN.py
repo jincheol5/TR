@@ -8,11 +8,11 @@ class TGN(nn.Module):
     def __init__(self,
             node_dim:int,
             edge_dim:int,
-            mem_dim:int,
+            time_dim:int,
             latent_dim:int,
             msg_dim:int,
-            time_dim:int,
-            output_dim:int,
+            mem_dim:int,
+            embed_dim:int,
             graph:TGN_Graph,
             n_layer:int,
             n_neighbor:int,
@@ -23,11 +23,12 @@ class TGN(nn.Module):
         super().__init__()
         self.node_dim=node_dim
         self.edge_dim=edge_dim
-        self.mem_dim=mem_dim
+        self.time_dim=time_dim
         self.latent_dim=latent_dim
         self.msg_dim=msg_dim
-        self.time_dim=time_dim
-        self.output_dim=output_dim
+        self.mem_dim=mem_dim
+        self.embed_dim=embed_dim
+
         self.n_layer=n_layer
         self.n_neighbor=n_neighbor
         self.n_head=n_head
@@ -52,7 +53,6 @@ class TGN(nn.Module):
             time_dim=time_dim,
             time_encoder=self.time_encoder,
             graph=self.graph,
-            memory=self.memory,
             msg_fn=msg_fn,
             aggr_fn=aggr_fn
         )
@@ -61,12 +61,11 @@ class TGN(nn.Module):
         self.encoder=GraphAttnEmbedding(
             node_dim=node_dim,
             edge_dim=edge_dim,
-            mem_dim=mem_dim,
-            latent_dim=latent_dim,
             time_dim=time_dim,
-            output_dim=output_dim,
+            latent_dim=latent_dim,
+            mem_dim=mem_dim,
+            embed_dim=embed_dim,
             graph=self.graph,
-            memory=self.memory,
             n_layer=n_layer,
             n_neighbor=n_neighbor,
             n_head=n_head,
@@ -75,67 +74,84 @@ class TGN(nn.Module):
         )
 
         # decoder
-        self.decoder=nn.Sequential(
-            nn.Linear(
-                in_features=output_dim+output_dim,
-                out_features=latent_dim
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                in_features=latent_dim,
-                out_features=1
-            )
+        self.decoder=nn.Linear(
+            in_features=embed_dim+embed_dim,
+            out_features=1
         )
 
     def update_model_memory(self,
-            event_src:torch.Tensor,
-            event_dst:torch.Tensor,
-            event_t:torch.Tensor,
-            event_edge:torch.Tensor
+            src:torch.Tensor,
+            dst:torch.Tensor,
+            edge:torch.Tensor,
+            event_t:torch.Tensor
         ):
         """
+        eventstream에 대해서 model의 memory state 업데이트
         """
-        ### update memory
-        self.memory_updater.update_memory(
-            src=event_src,
-            dst=event_dst,
+        mem_vec=self.memory.get_mem_vec()
+        mem_t=self.memory.get_mem_t()
+        updated_result=self.memory_updater.update_memory(
+            src=src,
+            dst=dst,
+            edge=edge,
             event_t=event_t,
-            edge=event_edge
+            mem_vec=mem_vec,
+            mem_t=mem_t
         )
+        updated_node=updated_result["node"]
+        updated_mem_vec=updated_result["mem_vec"]
+        updated_mem_t=updated_result["mem_t"]
+        self.memory.update_memory_state(
+            node=updated_node,
+            mem_vec=updated_mem_vec,
+            mem_t=updated_mem_t
+        )
+        return updated_result
+
+    def embedding(self,
+            src:torch.Tensor,
+            dst:torch.Tensor,
+            event_t:torch.Tensor
+        ):
+        """
+        TR sample의 src, dst node들의 embedding vector 반환.
+        """
+        mem_vec=self.memory.get_mem_vec()
+        batch_size=src.size(0) 
+        tar=torch.concat([src,dst],dim=0) 
+        tar_t=torch.cat([event_t,event_t],dim=0)
+        embedded_tar_vec=self.encoder.compute_embedding(
+            tar=tar,
+            tar_t=tar_t,
+            mem_vec=mem_vec,
+            n_layer=self.n_layer
+        )
+        src_vec=embedded_tar_vec[:batch_size]
+        dst_vec=embedded_tar_vec[batch_size:]
+        return {
+            "src_vec":src_vec,
+            "dst_vec":dst_vec
+        }
 
     def forward(self,
             src:torch.Tensor,
             dst:torch.Tensor,
-            query_t:torch.Tensor,
-            event:dict|None=None
+            event_t:torch.Tensor
         ):
         """
-        Memory update -> eventstream 기반
-        Embedding -> sample 기반
-        src, dst, query_time = sampling 된 pos/neg pair의 src, dst, query_time
+        TR sample에 대한 Temporal Reachability 예측.
         """
-        if event is not None:
-            self.update_model_memory(
-                event_src=event["src"],
-                event_dst=event["dst"],
-                event_t=event["event_t"],
-                event_edge=event["edge"]
-            )
-
-        ### 1. embed about node pair
-        tar=torch.concat([src,dst],dim=0) 
-        tar_t=torch.cat([query_t,query_t],dim=0) 
-        tar_vec=self.encoder.compute_embedding(
-            tar=tar,
-            tar_t=tar_t,
-            n_layer=self.n_layer
+        ### embedding
+        embedded_result=self.embedding(
+            src=src,
+            dst=dst,
+            event_t=event_t
         )
+        src_vec=embedded_result["src_vec"]
+        dst_vec=embedded_result["dst_vec"]
 
-        ### 2. compute node pair vector for predict TR
-        batch_size=src.size(0) 
-        src_vec=tar_vec[:batch_size]
-        dst_vec=tar_vec[batch_size:]
-        pair_vec=torch.concat([src_vec,dst_vec],dim=-1) # [B,output_dim+output_dim]
+        ### decode 
+        pair_vec=torch.concat([src_vec,dst_vec],dim=-1) # [B,embed_dim+embed_dim]
         pred_logit=self.decoder(pair_vec) # [B,1]
         return pred_logit
 

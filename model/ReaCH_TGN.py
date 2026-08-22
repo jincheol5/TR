@@ -2,17 +2,17 @@ import torch
 import torch.nn as nn
 from typing_extensions import Literal
 from graph import TGN_Graph
-from module import TimeEncoder,Memory,GraphAttnEmbedding,MemoryUpdater,ReaCH_TGN_Module
+from module import TimeEncoder,Memory,GraphAttnEmbedding,MemoryUpdater
 
 class ReaCH_TGN(nn.Module):
     def __init__(self,
             node_dim:int,
             edge_dim:int,
+            time_dim:int,
+            msg_dim:int,
             mem_dim:int,
             latent_dim:int,
-            msg_dim:int,
-            time_dim:int,
-            output_dim:int,
+            embed_dim:int,
             graph:TGN_Graph,
             n_layer:int,
             n_neighbor:int,
@@ -23,11 +23,11 @@ class ReaCH_TGN(nn.Module):
         super().__init__()
         self.node_dim=node_dim
         self.edge_dim=edge_dim
+        self.time_dim=time_dim
+        self.msg_dim=msg_dim
         self.mem_dim=mem_dim
         self.latent_dim=latent_dim
-        self.msg_dim=msg_dim
-        self.time_dim=time_dim
-        self.output_dim=output_dim
+        self.embed_dim=embed_dim
         self.n_layer=n_layer
         self.n_neighbor=n_neighbor
         self.n_head=n_head
@@ -36,9 +36,6 @@ class ReaCH_TGN(nn.Module):
         
         # graph
         self.graph=graph
-
-        # ReaCH-TGN Module
-        self.module=ReaCH_TGN_Module() 
 
         # memory
         self.n_node=self.graph.get_num_node()
@@ -51,11 +48,10 @@ class ReaCH_TGN(nn.Module):
         self.memory_updater=MemoryUpdater(
             mem_dim=mem_dim,
             edge_dim=edge_dim,
-            msg_dim=msg_dim,
             time_dim=time_dim,
+            msg_dim=msg_dim,
             time_encoder=self.time_encoder,
             graph=self.graph,
-            memory=self.memory,
             msg_fn=msg_fn,
             aggr_fn=aggr_fn
         )
@@ -64,12 +60,11 @@ class ReaCH_TGN(nn.Module):
         self.encoder=GraphAttnEmbedding(
             node_dim=node_dim,
             edge_dim=edge_dim,
+            time_dim=time_dim,
             mem_dim=mem_dim,
             latent_dim=latent_dim,
-            time_dim=time_dim,
-            output_dim=output_dim,
+            embed_dim=embed_dim,
             graph=self.graph,
-            memory=self.memory,
             n_layer=n_layer,
             n_neighbor=n_neighbor,
             n_head=n_head,
@@ -78,21 +73,145 @@ class ReaCH_TGN(nn.Module):
         )
 
         # decoder
-        self.decoder=nn.Sequential(
-            nn.Linear(
-                in_features=output_dim+output_dim,
-                out_features=latent_dim
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                in_features=latent_dim,
-                out_features=1
-            )
+        self.decoder=nn.Linear(
+            in_features=embed_dim+embed_dim,
+            out_features=1
         )
 
-    def forward(self,
-
-
+    def get_updated_memory(self,
+            src:torch.Tensor,
+            dst:torch.Tensor,
+            edge:torch.Tensor,
+            event_t:torch.Tensor,
+            mem_vec:torch.Tensor,
+            mem_t:torch.Tensor
         ):
         """
+        ReaCH-TGN에서 대조 학습을 위해 사용.
+        step: get_updated_memory -> embedding 
+
+        Input:
+            src: [B,]
+            dst: [B,]
+            edge: [B,]
+            event_t: [B,]
+            mem_vec: [N,mem_dim]
+            mem_t: [N,]
+        Return:
+            updated_result: dict
+                updated_node: [unique_N,]
+                updated_mem_vec: [unique_N,mem_dim]
+                updated_mem_t: [unique_N,]
         """
+        updated_result=self.memory_updater.update_memory(
+            src=src,
+            dst=dst,
+            edge=edge,
+            event_t=event_t,
+            mem_vec=mem_vec,
+            mem_t=mem_t
+        )
+        return updated_result
+
+    def set_model_memory_state(self,
+            node:torch.Tensor,
+            mem_vec:torch.Tensor,
+            mem_t:torch.Tensor
+        ):
+        """
+        ReaCH-TGN에서 대조 학습 후 next memory 지정을 위해 사용.
+        """
+        self.memory.update_memory_state(
+            node=node,
+            mem_vec=mem_vec,
+            mem_t=mem_t
+        )
+
+    def update_model_memory(self,
+            src:torch.Tensor,
+            dst:torch.Tensor,
+            edge:torch.Tensor,
+            event_t:torch.Tensor
+        ):
+        """
+        ReaCH-TGN에서 추론 시에만 사용.
+        eventstream에 대해서 model의 memory state 업데이트
+        """
+        mem_vec=self.memory.get_mem_vec()
+        mem_t=self.memory.get_mem_t()
+        updated_result=self.memory_updater.update_memory(
+            src=src,
+            dst=dst,
+            edge=edge,
+            event_t=event_t,
+            mem_vec=mem_vec,
+            mem_t=mem_t
+        )
+        updated_node=updated_result["node"]
+        updated_mem_vec=updated_result["mem_vec"]
+        updated_mem_t=updated_result["mem_t"]
+        self.memory.update_memory_state(
+            node=updated_node,
+            mem_vec=updated_mem_vec,
+            mem_t=updated_mem_t
+        )
+        return updated_result
+
+    def embedding(self,
+            src:torch.Tensor,
+            dst:torch.Tensor,
+            event_t:torch.Tensor,
+            mem_vec:torch.Tensor,
+        ):
+        """
+        Input:
+            src: [B,]
+            dst: [B,]
+            event_t: [B,]
+            mem_vec: [N,mem_dim]
+        Return:
+            dict:
+                src_vec
+                dst_vec
+        """
+        batch_size=src.size(0)
+        tar=torch.concat([src,dst],dim=0) 
+        tar_t=torch.cat([event_t,event_t],dim=0)
+        embedded_tar_vec=self.encoder.compute_embedding(
+            tar=tar,
+            tar_t=tar_t,
+            mem_vec=mem_vec,
+            n_layer=self.n_layer
+        )
+        src_vec=embedded_tar_vec[:batch_size]
+        dst_vec=embedded_tar_vec[batch_size:]
+        return {
+            "src_vec":src_vec,
+            "dst_vec":dst_vec
+        }
+
+    def forward(self,
+            src:torch.Tensor,
+            dst:torch.Tensor,
+            event_t:torch.Tensor
+        ):
+        """
+        TR sample에 대한 Temporal Reachability 예측.
+        """
+        ### memory
+        mem_vec=self.memory.get_mem_vec()
+
+        ### embedding
+        embedded_result=self.embedding(
+            src=src,
+            dst=dst,
+            event_t=event_t,
+            mem_vec=mem_vec
+        )
+        src_vec=embedded_result["src_vec"]
+        dst_vec=embedded_result["dst_vec"]
+
+        ### decode 
+        pair_vec=torch.concat([src_vec,dst_vec],dim=-1) # [B,embed_dim+embed_dim]
+        pred_logit=self.decoder(pair_vec) # [B,1]
+        return pred_logit

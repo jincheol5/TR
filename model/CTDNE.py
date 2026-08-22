@@ -30,16 +30,9 @@ class CTDNE(nn.Module):
         self.node_ft.weight.requires_grad_(False)
 
         # decoder
-        self.decoder=nn.Sequential(
-            nn.Linear(
-                in_features=embed_dim+embed_dim,
-                out_features=latent_dim
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                in_features=latent_dim,
-                out_features=1
-            )
+        self.decoder=nn.Linear(
+            in_features=embed_dim+embed_dim,
+            out_features=1
         )
 
     def convert_SkipGram_to_torch_embedding(self):

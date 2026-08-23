@@ -4,4 +4,3 @@ from .attn_module import *
 from .mem_module import *
 from .embed_module import *
 from .DyGFormer_module import *
-from .ReaCH_TGN_module import *

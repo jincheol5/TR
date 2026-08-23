@@ -1,2 +1,2 @@
-from .walk_model_train import *
-from .gnn_model_train import *
+from .walk_train import *
+from .gnn_train import *

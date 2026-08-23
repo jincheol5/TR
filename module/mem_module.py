@@ -17,13 +17,13 @@ class Memory(nn.Module):
         super().__init__()
         self.n_node=n_node
         self.mem_dim=mem_dim
-        self.mem_vec=nn.Parameter(
-            torch.zeros((n_node+1,mem_dim)),
-            requires_grad=False
+        self.register_buffer(
+            "mem_vec",
+            torch.zeros(n_node+1,mem_dim),
         )
-        self.mem_t=nn.Parameter(
+        self.register_buffer(
+            "mem_t",
             torch.zeros(n_node+1),
-            requires_grad=False
         )
         self.init_memory_state()
     
@@ -31,11 +31,13 @@ class Memory(nn.Module):
         """
         initialize all the mem_ft and mem_t to zero vectors, which should be called at the start of each epoch
         """
+        self.mem_vec.detach_()
+        self.mem_t.detach_()
         self.mem_vec.data.zero_()
         self.mem_t.data.zero_()
 
     def get_mem_vec(self,
-            node:torch.Tensor|None
+            node:torch.Tensor|None=None
         ):
         """
         Input:
@@ -49,7 +51,7 @@ class Memory(nn.Module):
             return self.mem_vec[node]
 
     def get_mem_t(self,
-            node:torch.Tensor|None
+            node:torch.Tensor|None=None
         ):
         """
         Input:
@@ -92,11 +94,6 @@ class Memory(nn.Module):
         """
         self.mem_vec[node]=mem_vec
         self.mem_t[node]=mem_t
-
-    def detach_memory_state(self):
-        """
-        """
-        self.mem_vec.detach_()
 
 class MemoryUpdater(nn.Module):
     def __init__(self,
@@ -333,6 +330,7 @@ class GRUMemoryUpdater(MemoryUpdater):
             time_dim:int,
             msg_dim:int,
             time_encoder:TimeEncoder,
+            graph:TGN_Graph,
             msg_fn:Literal["concat","mlp"]="concat",
             aggr_fn:Literal["last","mean"]="last"
         ):
@@ -342,6 +340,7 @@ class GRUMemoryUpdater(MemoryUpdater):
             time_dim=time_dim,
             msg_dim=msg_dim,
             time_encoder=time_encoder,
+            graph=graph,
             msg_fn=msg_fn,
             aggr_fn=aggr_fn
         )

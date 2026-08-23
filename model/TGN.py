@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing_extensions import Literal
 from graph import TGN_Graph
-from module import TimeEncoder,Memory,GraphAttnEmbedding,MemoryUpdater
+from module import TimeEncoder,Memory,GraphAttnEmbedding,GRUMemoryUpdater
 
 class TGN(nn.Module):
     def __init__(self,
@@ -46,7 +46,7 @@ class TGN(nn.Module):
         self.time_encoder=TimeEncoder(time_dim=time_dim)
 
         # memory updater
-        self.memory_updater=MemoryUpdater(
+        self.memory_updater=GRUMemoryUpdater(
             mem_dim=mem_dim,
             edge_dim=edge_dim,
             msg_dim=msg_dim,

@@ -136,7 +136,6 @@ class TGN_Graph(TemporalGraph):
         neighbor_edge=torch.zeros((n_tar,n_neighbor),dtype=torch.long)
         neighbor_t=torch.zeros((n_tar,n_neighbor),dtype=torch.float32)
         neighbor_ts=torch.zeros((n_tar,n_neighbor),dtype=torch.float32)
-        
 
         tar=tar.detach().cpu().tolist()
         tar_t=tar_t.detach().cpu().tolist()

@@ -19,7 +19,7 @@ class TemporalGraphDataset(Dataset):
     def __getitem__(self,idx):
         return self.src[idx],self.dst[idx],self.t[idx],self.edge[idx]
 
-class TRDataset(Dataset):
+class TRSampleDataset(Dataset):
     """
     pos/neg pair 수가 다를 경우 작은 쪽의 수로 맞춰짐
 
@@ -97,6 +97,20 @@ class TRDataset(Dataset):
             "neg_pair_t":self.neg_pair_t[idx]
         }
 
+    def getAll(self):
+        return {
+            "pos_src":self.pos_src,
+            "pos_dst":self.pos_dst,
+            "pos_label":self.pos_label,
+            "pos_info":self.pos_info,
+            "pos_pair_t":self.pos_pair_t,
+            "neg_src":self.neg_src,
+            "neg_dst":self.neg_dst,
+            "neg_label":self.neg_label,
+            "neg_info":self.neg_info,
+            "neg_pair_t":self.neg_pair_t
+        }
+
 class TrainUtils:
     @staticmethod
     def split_graph_df(
@@ -123,32 +137,59 @@ class TrainUtils:
         return train_df,val_df,test_df
 
     @staticmethod
-    def get_sample_list(
+    def get_TR_sample_loader(
             graph:TemporalGraph,
-            max_hop:int,
-            n_batch_sample:int,
+            n_sample:int,
             n_pair:int,
+            query_time:float,
+            max_hop:int=5,
+            batch_size:int=200
+        ):
+        """
+        """
+        TR_sample=graph.random_TR_sampling(
+            n_sample=n_sample,
+            n_pair=n_pair,
+            query_time=query_time,
+            max_hop=max_hop
+        )
+        print(f"Finish to generate TR sample!")
+
+        # Dataset
+        TR_sample_dataset=TRSampleDataset(sample=TR_sample,query_time=query_time)
+
+        # DataLoader, query_time 기준으로 생성되었기 때문에 shuffle 가능
+        TR_sample_loader=DataLoader(dataset=TR_sample_dataset,batch_size=batch_size,shuffle=True)
+        return TR_sample_loader
+
+    @staticmethod
+    def get_TR_sample_dataset_list(
+            graph:TemporalGraph,
+            n_sample:int,
+            n_pair:int,
+            max_hop:int,
             data_loader:DataLoader
         ):
         """
-        각 batch의 가장 큰 event_time을 query_time으로 하여 batch마다 graph.random_TR_sampling() 함수 수행 후 순서대로 리스트에 넣어서 리스트 반환하는 함수.
-        data_loader는 TemporalGraphDataset에 대한 batch loader이다.
-        각 sample 개수 = batch_size
         """
-        sample_list=[]
+        TR_sample_dataset_list=[]
         for _,_,event_t,_ in tqdm(
                 data_loader,
                 desc="Generating TR samples for training..."
             ):
             query_time=event_t.max().item()
-            sample=graph.random_TR_sampling(
-                n_sample=n_batch_sample, 
+            TR_sample=graph.random_TR_sampling(
+                n_sample=n_sample, 
                 n_pair=n_pair,
                 max_hop=max_hop,
                 query_time=query_time
             )
-            sample_list.append(sample)
-        return sample_list
+            TR_sample_dataset=TRSampleDataset(
+                sample=TR_sample,
+                query_time=query_time
+            )
+            TR_sample_dataset_list.append(TR_sample_dataset)
+        return TR_sample_dataset_list
 
 
 class ReaCH_TGN_Utils:

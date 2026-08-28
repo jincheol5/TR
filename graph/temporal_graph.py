@@ -158,6 +158,19 @@ class TemporalGraph:
             current=next_state
         return TR_info
 
+    def get_TR_info_tensor(self,
+            max_hop:int,
+            batch_size:int,
+        ):
+        """
+        Input:
+
+        Return:
+            TR_label: [seq_len,N,N], boolean tensor
+            TR_first_t: [seq_len,N,N], int tensor
+        """
+
+
     def random_TR_sampling(self,
             n_sample:int,
             n_pair:int,

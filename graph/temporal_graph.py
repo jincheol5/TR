@@ -23,7 +23,7 @@ class TemporalGraph:
         adj=[[] for _ in range(self.n_node+1)]
         adj_edge=[[] for _ in range(self.n_node+1)]
         adj_t=[[] for _ in range(self.n_node+1)]
-        for event in graph_df.itertuples(index=False): # col: [u,i,ts,idx=edge_id]
+        for event in graph_df.itertuples(index=False): # col: [u,i,t,idx=edge_id]
             src=int(event.u)
             dst=int(event.i)
             t=float(event.t)
@@ -157,19 +157,6 @@ class TemporalGraph:
                     }
             current=next_state
         return TR_info
-
-    def get_TR_info_tensor(self,
-            max_hop:int,
-            batch_size:int,
-        ):
-        """
-        Input:
-
-        Return:
-            TR_label: [seq_len,N,N], boolean tensor
-            TR_first_t: [seq_len,N,N], int tensor
-        """
-
 
     def random_TR_sampling(self,
             n_sample:int,

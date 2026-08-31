@@ -23,15 +23,35 @@ def main(**kwargs):
 
     graph=TemporalGraph(graph_df=graph_df)
 
-    train_TR_result=TrainUtils.get_TR_result(
-        graph=graph,
-        data_loader=train_loader,
-        max_hop=kwargs["max_hop"]
+    ### compute TR_result
+    match kwargs["purpose"]:
+        case "train":
+            TR_result=TrainUtils.get_TR_result(
+                graph=graph,
+                data_loader=train_loader,
+                max_hop=kwargs["max_hop"]
+            )
+        case "val":
+            TR_result=TrainUtils.get_TR_result(
+                graph=graph,
+                data_loader=val_loader,
+                max_hop=kwargs["max_hop"]
+            )
+        case "test":
+            TR_result=TrainUtils.get_TR_result(
+                graph=graph,
+                data_loader=test_loader,
+                max_hop=kwargs["max_hop"]
+            )
+
+    ### save TR_result
+    DataUtils.save_TR_result(
+        TR_result=TR_result,
+        dataset_name=kwargs["dataset_name"],
+        max_hop=kwargs["max_hop"],
+        batch_size=kwargs["batch_size"],
+        purpose=kwargs["purpose"]
     )
-    train_TR_label=train_TR_result["TR_label"]
-    train_TR_hop=train_TR_result["TR_hop"]
-    train_TR_last_t=train_TR_result["TR_last_t"]
-    train_TR_first_t=train_TR_result["TR_first_t"]
 
 if __name__=="__main__":
     """
@@ -50,7 +70,7 @@ if __name__=="__main__":
     )
     parser.add_argument("--max_hop",type=int,default=5)
     parser.add_argument("--batch_size",type=int,default=200)
-    parser.add_argument("--perpose",
+    parser.add_argument("--purpose",
         type=str,
         choices=[
             "train",
@@ -64,6 +84,6 @@ if __name__=="__main__":
         "dataset_name":args.dataset_name,
         "max_hop":args.max_hop,
         "batch_size":args.batch_size,
-        "perpose":args.perpose
+        "purpose":args.purpose
     }
     main(**app_config)

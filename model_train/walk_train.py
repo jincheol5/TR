@@ -11,8 +11,9 @@ class WalkModelTrainer:
     @staticmethod
     def train_model(
             model:nn.Module,
-            train_sample_loader:DataLoader,
-            val_sample_loader:DataLoader,
+            train_loader:DataLoader,
+            val_sample_list:list,
+            TR_label:torch.Tensor,
             **kwargs
         ):
         """
@@ -72,23 +73,21 @@ class WalkModelTrainer:
         Model Train
         """
         for epoch in tqdm(range(kwargs["epoch"]),desc=f"Model Training..."):
+            ### Epoch마다 train_sample_list 생성
+            train_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                n_pair=kwargs["n_pair"],
+                data_loader=train_loader,
+                TR_label=TR_label
+            )
+
             model.train()
-            for sample in tqdm(
-                    train_sample_loader,
+            for batch_sample in tqdm(
+                    train_sample_list,
                     desc=f"Training epoch: {epoch+1}..."
                 ):
-                src=torch.cat([
-                    sample["pos_src"],
-                    sample["neg_src"]
-                ])
-                dst=torch.cat([
-                    sample["pos_dst"],
-                    sample["neg_dst"]
-                ])
-                label=torch.cat([
-                    sample["pos_label"],
-                    sample["neg_label"]
-                ]).float()
+                src=batch_sample["src"]
+                dst=batch_sample["dst"]
+                label=batch_sample["label"]
                 src=src.to(device)
                 dst=dst.to(device)
                 label=label.to(device)
@@ -111,9 +110,9 @@ class WalkModelTrainer:
             """
             Validate Model
             """
-            val_result=WalkModelTrainer.evaluate_model(
+            val_result=WalkModelTrainer.validate_model(
                 model=model,
-                sample_loader=val_sample_loader,
+                val_sample_list=val_sample_list,
                 **kwargs
             )
             val_acc=val_result["acc"]
@@ -138,7 +137,8 @@ class WalkModelTrainer:
     @staticmethod
     def validate_model(
             model,
-            val_sample_loader:list
+            val_sample_list:list,
+            **kwargs
         ):
         if torch.cuda.is_available():
             device=torch.device("cuda")
@@ -155,19 +155,10 @@ class WalkModelTrainer:
         loss_list=[]
         acc_list=[]
         with torch.no_grad():
-            for sample in tqdm(val_sample_loader,desc=f"Compute Val_Loss..."):
-                src=torch.cat([
-                    sample["pos_src"],
-                    sample["neg_src"]
-                ])
-                dst=torch.cat([
-                    sample["pos_dst"],
-                    sample["neg_dst"]
-                ])
-                label=torch.cat([
-                    sample["pos_label"],
-                    sample["neg_label"]
-                ]).float()
+            for batch_sample in tqdm(val_sample_list,desc=f"Validate..."):
+                src=batch_sample["src"]
+                dst=batch_sample["dst"]
+                label=batch_sample["label"]
                 src=src.to(device)
                 dst=dst.to(device)
                 label=label.to(device)
@@ -197,7 +188,7 @@ class WalkModelTrainer:
     @staticmethod
     def evaluate_model(
             model:nn.Module,
-            test_sample_loader:list,
+            test_sample_list:list,
             **kwargs
         ):
         """
@@ -213,22 +204,13 @@ class WalkModelTrainer:
 
         acc_list=[]
         with torch.no_grad():
-            for sample in tqdm(
-                    test_sample_loader,
+            for batch_sample in tqdm(
+                    test_sample_list,
                     desc=f"Evaluating..."
                 ):
-                src=torch.cat([
-                    sample["pos_src"],
-                    sample["neg_src"]
-                ])
-                dst=torch.cat([
-                    sample["pos_dst"],
-                    sample["neg_dst"]
-                ])
-                label=torch.cat([
-                    sample["pos_label"],
-                    sample["neg_label"]
-                ]).float()
+                src=batch_sample["src"]
+                dst=batch_sample["dst"]
+                label=batch_sample["label"]
                 src=src.to(device)
                 dst=dst.to(device)
                 label=label.to(device)

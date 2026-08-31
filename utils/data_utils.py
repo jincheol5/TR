@@ -207,6 +207,7 @@ class DataUtils:
                 "bitcoin-alpha",
                 "enron"
             ],
+            max_hop:int,
             batch_size:int,
             purpose:Literal[
                 "train",
@@ -214,7 +215,7 @@ class DataUtils:
                 "test"
             ]
         ):
-        TR_result_file_name=f"TR_result_{dataset_name}_B{batch_size}_{purpose}.pt"
+        TR_result_file_name=f"{dataset_name}_H{max_hop}_B{batch_size}_{purpose}.pt"
         TR_result_file_path=os.path.join(DataUtils.base_path,dataset_name,f"TR_result",TR_result_file_name)
         torch.save(TR_result,TR_result_file_path)
         print(f"Save {TR_result_file_name}!")
@@ -227,6 +228,7 @@ class DataUtils:
                 "bitcoin-alpha",
                 "enron"
             ],
+            max_hop:int,
             batch_size:int,
             purpose:Literal[
                 "train",
@@ -242,7 +244,7 @@ class DataUtils:
                 TR_last_t:
                 TR_first_t:
         """
-        TR_result_file_name=f"TR_result_{dataset_name}_B{batch_size}_{purpose}.pt"
+        TR_result_file_name=f"{dataset_name}_H{max_hop}_B{batch_size}_{purpose}.pt"
         TR_result_file_path=os.path.join(DataUtils.base_path,dataset_name,f"TR_result",TR_result_file_name)
         TR_result=torch.load(TR_result_file_path)
         return TR_result

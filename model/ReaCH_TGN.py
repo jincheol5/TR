@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing_extensions import Literal
 from graph import TGN_Graph
-from module import TimeEncoder,Memory,GraphAttnEmbedding,MemoryUpdater
+from module import TimeEncoder,Memory,GraphAttnEmbedding,GRUMemoryUpdater
 
 class ReaCH_TGN(nn.Module):
     def __init__(self,
@@ -45,7 +45,7 @@ class ReaCH_TGN(nn.Module):
         self.time_encoder=TimeEncoder(time_dim=time_dim)
 
         # memory updater
-        self.memory_updater=MemoryUpdater(
+        self.memory_updater=GRUMemoryUpdater(
             mem_dim=mem_dim,
             edge_dim=edge_dim,
             time_dim=time_dim,
@@ -78,7 +78,7 @@ class ReaCH_TGN(nn.Module):
             out_features=1
         )
 
-    def get_updated_memory(self,
+    def get_embedded_vec_for_contrastive_learning(self,
             src:torch.Tensor,
             dst:torch.Tensor,
             edge:torch.Tensor,
@@ -88,7 +88,6 @@ class ReaCH_TGN(nn.Module):
         ):
         """
         ReaCH-TGN에서 대조 학습을 위해 사용.
-        step: get_updated_memory -> embedding 
 
         Input:
             src: [B,]
@@ -98,11 +97,11 @@ class ReaCH_TGN(nn.Module):
             mem_vec: [N,mem_dim]
             mem_t: [N,]
         Return:
-            updated_result: dict
-                updated_node: [unique_N,]
-                updated_mem_vec: [unique_N,mem_dim]
-                updated_mem_t: [unique_N,]
+            dict:
+                src_vec
+                dst_vec
         """
+        ### update memory
         updated_result=self.memory_updater.update_memory(
             src=src,
             dst=dst,
@@ -111,21 +110,23 @@ class ReaCH_TGN(nn.Module):
             mem_vec=mem_vec,
             mem_t=mem_t
         )
-        return updated_result
+        updated_node=updated_result["node"]
+        updated_mem_vec=updated_result["mem_vec"]
+        mem_vec[updated_node]=updated_mem_vec
 
-    def set_model_memory_state(self,
-            node:torch.Tensor,
-            mem_vec:torch.Tensor,
-            mem_t:torch.Tensor
-        ):
-        """
-        ReaCH-TGN에서 대조 학습 후 next memory 지정을 위해 사용.
-        """
-        self.memory.update_memory_state(
-            node=node,
-            mem_vec=mem_vec,
-            mem_t=mem_t
+        ### embedding
+        embedded_result=self.embedding(
+            src=src,
+            dst=dst,
+            event_t=event_t,
+            mem_vec=mem_vec
         )
+        src_vec=embedded_result["src_vec"]
+        dst_vec=embedded_result["dst_vec"]
+        return {
+            "src_vec":src_vec,
+            "dst_vec":dst_vec
+        }
 
     def update_model_memory(self,
             src:torch.Tensor,

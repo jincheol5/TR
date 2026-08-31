@@ -31,10 +31,12 @@ class Memory(nn.Module):
         """
         initialize all the mem_ft and mem_t to zero vectors, which should be called at the start of each epoch
         """
-        self.mem_vec.detach_()
-        self.mem_t.detach_()
         self.mem_vec.data.zero_()
         self.mem_t.data.zero_()
+
+    def memory_detach(self):
+        self.mem_vec.detach_()
+        self.mem_t.detach_()
 
     def get_mem_vec(self,
             node:torch.Tensor|None=None
@@ -291,6 +293,10 @@ class MemoryUpdater(nn.Module):
             event_t: [B,]
             mem_vec: [N,mem_dim]
             mem_t: [N,]
+        Return:
+            node: [unique_N,]
+            mem_vec: [unique_N,mem_dim]
+            mem_t: [unique_N,]
         """
         src_msg,dst_msg=self.create_message(
             src=src,

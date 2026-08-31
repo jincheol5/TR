@@ -158,7 +158,10 @@ class TemporalGraph:
             current=next_state
         return TR_info
 
-    def random_TR_sampling(self,
+    
+
+
+    def random_TR_sampling_old(self,
             n_sample:int,
             n_pair:int,
             query_time:float|None=None,

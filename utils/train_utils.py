@@ -19,98 +19,6 @@ class TemporalGraphDataset(Dataset):
     def __getitem__(self,idx):
         return self.src[idx],self.dst[idx],self.t[idx],self.edge[idx]
 
-class TRSampleDataset(Dataset):
-    """
-    pos/neg pair 수가 다를 경우 작은 쪽의 수로 맞춰짐
-
-    Input:
-        sample: {
-            "src": [N,] long tensor,
-            "dst": [N,] long tensor,
-            "label": [N,] tensor,
-            "pos_mask": [N,] bool tensor,
-            "pair_info": list
-        }
-    Return:
-        각 item은 positive 1개, negative 1개로 구성
-    """
-    def __init__(self,
-            sample:dict,
-            query_time:float
-        ):
-        pos_mask=sample["pos_mask"]
-        neg_mask=~pos_mask
-
-        self.pos_src=sample["src"][pos_mask]
-        self.pos_dst=sample["dst"][pos_mask]
-        self.pos_label=sample["label"][pos_mask]
-        self.pos_info=[
-            info
-            for info,is_pos in zip(
-                sample["pair_info"],
-                pos_mask.tolist()
-            )
-            if is_pos
-        ]
-
-        self.neg_src=sample["src"][neg_mask]
-        self.neg_dst=sample["dst"][neg_mask]
-        self.neg_label=sample["label"][neg_mask]
-        self.neg_info=[
-            info
-            for info,is_pos in zip(
-                sample["pair_info"],
-                pos_mask.tolist()
-            )
-            if not is_pos
-        ]
-
-        self.n_sample=min(
-            len(self.pos_src),
-            len(self.neg_src)
-        )
-        self.pos_pair_t=torch.full(
-            (self.n_sample,),
-            query_time,
-            dtype=torch.float
-        )
-        self.neg_pair_t=torch.full(
-            (self.n_sample,),
-            query_time,
-            dtype=torch.float
-        )
-
-    def __len__(self):
-        return self.n_sample
-
-    def __getitem__(self,idx):
-        return {
-            "pos_src":self.pos_src[idx],
-            "pos_dst":self.pos_dst[idx],
-            "pos_label":self.pos_label[idx],
-            "pos_info":self.pos_info[idx],
-            "pos_pair_t":self.pos_pair_t[idx],
-            "neg_src":self.neg_src[idx],
-            "neg_dst":self.neg_dst[idx],
-            "neg_label":self.neg_label[idx],
-            "neg_info":self.neg_info[idx],
-            "neg_pair_t":self.neg_pair_t[idx]
-        }
-
-    def getAll(self):
-        return {
-            "pos_src":self.pos_src,
-            "pos_dst":self.pos_dst,
-            "pos_label":self.pos_label,
-            "pos_info":self.pos_info,
-            "pos_pair_t":self.pos_pair_t,
-            "neg_src":self.neg_src,
-            "neg_dst":self.neg_dst,
-            "neg_label":self.neg_label,
-            "neg_info":self.neg_info,
-            "neg_pair_t":self.neg_pair_t
-        }
-
 class TrainUtils:
     @staticmethod
     def split_graph_df(
@@ -198,60 +106,291 @@ class TrainUtils:
             "TR_first_t":TR_first_t
         }
 
-    # @staticmethod
-    # def get_TR_sample_loader(
-    #         graph:TemporalGraph,
-    #         n_sample:int,
-    #         n_pair:int,
-    #         query_time:float,
-    #         max_hop:int=5,
-    #         batch_size:int=200
-    #     ):
-    #     """
-    #     """
-    #     TR_sample=graph.random_TR_sampling(
-    #         n_sample=n_sample,
-    #         n_pair=n_pair,
-    #         query_time=query_time,
-    #         max_hop=max_hop
-    #     )
-    #     print(f"Finish to generate TR sample!")
+    @staticmethod
+    def random_src_TR_sampling(
+            n_node:int,
+            n_sample:int,
+            n_pair:int,
+            query_time:float,
+            TR_label:torch.Tensor
+        )->dict[str,torch.Tensor]:
+        """
+        pos_pair + neg_pair 개수가 n_sample 개가 될 때까지 sampling 반복합니다.
+        매 반복마다 무작위로 source 추출 후 Reachable(positive) / Unreachable(negative) pair를 같은 수(n_pair)로 무작위 추출합니다.
+        source node는 padding node를 제외하며, source node 간에 중복이 없도록 합니다.
+        dst node에는 자기자신과 padding node를 제외합니다.
+        pair 수가 비균형 할 경우 부족한 수만큼만 유지합니다. (ex: pos_pair:10, neg_pair:5 의 경우 pos_pair:5, neg_pair:5)
+        한 쪽 밖에 없는 경우에도 유효한 쪽만 유지하여 sampling 합니다. (ex: pos_pair:0, neg_pair:10)
 
-    #     # Dataset
-    #     TR_sample_dataset=TRSampleDataset(sample=TR_sample,query_time=query_time)
+        Input:
+            n_node
+            n_sample: 총 pos/neg pair 개수 (짝수만 허용)
+            n_pair: source 당 sampling할 pos/neg pair node 개수
+            query_time:
+            TR_label: [N+1,N+1] bool tensor
+        Return:
+            src: [n_sample,] long tensor
+            dst: [n_sample,] long tensor
+            label: [n_sample,] float tensor (1.0 or 0.0)
+            query_t: [n_sample,] float tensor
+            pos_mask: [n_sample,] bool tensor
+        """
+        if n_sample%2!=0:
+            raise ValueError("n_sample must be even.")
 
-    #     # DataLoader, query_time 기준으로 생성되었기 때문에 shuffle 가능
-    #     TR_sample_loader=DataLoader(dataset=TR_sample_dataset,batch_size=batch_size,shuffle=True)
-    #     return TR_sample_loader
+        sampled_src=[]
+        sampled_dst=[]
+        sampled_label=[]
+        n_sampled=0
+        # padding node 0을 제외한 source를 중복 없이 무작위 순회
+        sources=torch.randperm(n_node)+1
+        for source in sources:
+            if n_sampled>=n_sample:
+                break
 
-    # @staticmethod
-    # def get_TR_sample_dataset_list(
-    #         graph:TemporalGraph,
-    #         n_sample:int,
-    #         n_pair:int,
-    #         max_hop:int,
-    #         data_loader:DataLoader
-    #     ):
-    #     """
-    #     """
-    #     TR_sample_dataset_list=[]
-    #     for _,_,event_t,_ in tqdm(
-    #             data_loader,
-    #             desc="Generating TR samples for training..."
-    #         ):
-    #         query_time=event_t.max().item()
-    #         TR_sample=graph.random_TR_sampling(
-    #             n_sample=n_sample, 
-    #             n_pair=n_pair,
-    #             max_hop=max_hop,
-    #             query_time=query_time
-    #         )
-    #         TR_sample_dataset=TRSampleDataset(
-    #             sample=TR_sample,
-    #             query_time=query_time
-    #         )
-    #         TR_sample_dataset_list.append(TR_sample_dataset)
-    #     return TR_sample_dataset_list
+            candidate_mask=torch.ones(n_node+1,dtype=torch.bool)
+            candidate_mask[0]=False
+            candidate_mask[source]=False
+
+            reachable=TR_label[source].bool()
+            pos_nodes=torch.nonzero(candidate_mask&reachable).flatten()
+            neg_nodes=torch.nonzero(candidate_mask&~reachable).flatten()
+            remaining=n_sample-n_sampled
+
+            if pos_nodes.numel()>0 and neg_nodes.numel()>0:
+                # 양쪽 후보가 있으면 더 적은 쪽에 맞춰 균형 있게 sampling
+                n_balanced=min(
+                    n_pair,
+                    pos_nodes.numel(),
+                    neg_nodes.numel(),
+                    remaining//2
+                )
+                n_pos_sample=n_balanced
+                n_neg_sample=n_balanced
+            elif pos_nodes.numel()>0:
+                n_pos_sample=min(n_pair,pos_nodes.numel(),remaining)
+                n_neg_sample=0
+            elif neg_nodes.numel()>0:
+                n_pos_sample=0
+                n_neg_sample=min(n_pair,neg_nodes.numel(),remaining)
+            else:
+                continue
+
+            if n_pos_sample>0:
+                selected_pos=pos_nodes[
+                    torch.randperm(pos_nodes.numel())[:n_pos_sample]
+                ]
+                sampled_src.append(
+                    torch.full((n_pos_sample,),int(source),dtype=torch.long)
+                )
+                sampled_dst.append(selected_pos)
+                sampled_label.append(
+                    torch.ones(n_pos_sample,dtype=torch.float32)
+                )
+
+            if n_neg_sample>0:
+                selected_neg=neg_nodes[
+                    torch.randperm(neg_nodes.numel())[:n_neg_sample]
+                ]
+                sampled_src.append(
+                    torch.full((n_neg_sample,),int(source),dtype=torch.long)
+                )
+                sampled_dst.append(selected_neg)
+                sampled_label.append(
+                    torch.zeros(n_neg_sample,dtype=torch.float32)
+                )
+
+            n_sampled+=n_pos_sample+n_neg_sample
+
+        if len(sampled_src)>0:
+            src=torch.cat(sampled_src)
+            dst=torch.cat(sampled_dst)
+            label=torch.cat(sampled_label)
+        else:
+            src=torch.empty(0,dtype=torch.long)
+            dst=torch.empty(0,dtype=torch.long)
+            label=torch.empty(0,dtype=torch.float32)
+
+        query_t=torch.full(
+            (src.numel(),),
+            float(query_time),
+            dtype=torch.float32
+        )
+        return {
+            "src":src,
+            "dst":dst,
+            "label":label,
+            "query_t":query_t,
+            "pos_mask":label.bool()
+        }
+
+    @staticmethod
+    def random_TR_sampling(
+            sources:list,
+            n_pair:int,
+            query_time:float,
+            TR_label:torch.Tensor
+        )->dict[str,torch.Tensor]:
+        """
+        source 마다 Reachable(positive) / Unreachable(negative) pair를 같은 수(n_pair)로 무작위 추출합니다.
+        source node는 중복이 없도록 합니다.
+        dst node에는 자기자신과 padding node를 제외합니다.
+        pair 수가 비균형 할 경우에도 부족한 대로 수를 유지합니다. (ex: pos_pair:10, neg_pair:5)
+        한 쪽 밖에 없는 경우에도 유효한 쪽만 유지하여 sampling 합니다. (ex: pos_pair:0, neg_pair:10)
+
+        Input:
+            sources: sampling 할 source node list
+            n_pair: source 당 sampling할 pos/neg pair node 개수
+            query_time:
+            TR_label: [N+1,N+1] bool tensor
+        Return:
+            src: [n_sample,] long tensor
+            dst: [n_sample,] long tensor
+            label: [n_sample,] float tensor (1.0 or 0.0)
+            query_t: [n_sample,] float tensor
+            pos_mask: [n_sample,] bool tensor
+        """
+        n_node=TR_label.size(0)-1
+        sampled_src=[]
+        sampled_dst=[]
+        sampled_label=[]
+        for source in sources:
+            # destination 후보 설정
+            candidate_mask=torch.ones(n_node+1,dtype=torch.bool)
+            candidate_mask[0]=False
+            candidate_mask[source]=False
+
+            # positive/negative 후보 분리
+            reachable=TR_label[source].bool()
+            pos_mask=candidate_mask&reachable
+            neg_mask=candidate_mask&~reachable
+            pos_nodes=torch.nonzero(pos_mask).flatten()
+            neg_nodes=torch.nonzero(neg_mask).flatten()
+
+            # positive sampling
+            n_pos_sample=min(n_pair,pos_nodes.numel())
+            if n_pos_sample>0:
+                pos_perm=torch.randperm(pos_nodes.numel())
+                selected_pos=pos_nodes[pos_perm[:n_pos_sample]]
+                sampled_src.append(
+                    torch.full((n_pos_sample,),int(source),dtype=torch.long)
+                )
+                sampled_dst.append(selected_pos)
+                sampled_label.append(
+                    torch.ones(n_pos_sample,dtype=torch.float32)
+                )
+
+            # negative sampling
+            n_neg_sample=min(n_pair,neg_nodes.numel())
+            if n_neg_sample>0:
+                neg_perm=torch.randperm(neg_nodes.numel())
+                selected_neg=neg_nodes[neg_perm[:n_neg_sample]]
+                sampled_src.append(
+                    torch.full((n_neg_sample,),int(source),dtype=torch.long)
+                )
+                sampled_dst.append(selected_neg)
+                sampled_label.append(
+                    torch.zeros(n_neg_sample,dtype=torch.float32)
+                )
+
+        # sampled pair 결합
+        if len(sampled_src)>0:
+            src=torch.cat(sampled_src)
+            dst=torch.cat(sampled_dst)
+            label=torch.cat(sampled_label)
+        else:
+            src=torch.empty(0,dtype=torch.long)
+            dst=torch.empty(0,dtype=torch.long)
+            label=torch.empty(0,dtype=torch.float32)
+        query_t=torch.full(
+            (src.numel(),),
+            float(query_time),
+            dtype=torch.float32
+        )
+        pos_mask=label.bool()
+        return {
+            "src":src,
+            "dst":dst,
+            "label":label,
+            "query_t":query_t,
+            "pos_mask":pos_mask
+        }
+
+    @staticmethod
+    def get_coarse_grained_TR_sample_list(
+            n_node:int,
+            n_sample:int,
+            n_pair:int,
+            query_time:float,
+            batch_size:int,
+            TR_label:torch.Tensor
+        )->list[dict[str,torch.Tensor]]:
+        """
+        Walk-based Model 학습용 TR_sample_list 반환.
+
+        Input:
+            n_node
+            n_sample
+            n_pair
+            query_time
+            batch_size
+            TR_label: [batch_len,N+1,N+1] bool tensor
+        Return:
+            batch_TR_sample_list
+        """
+        if batch_size<=0:
+            raise ValueError("batch_size must be positive.")
+
+        TR_sample=TrainUtils.random_src_TR_sampling(
+            n_node=n_node,
+            n_sample=n_sample,
+            n_pair=n_pair,
+            query_time=query_time,
+            TR_label=TR_label[-1]
+        )
+
+        n_TR_sample=TR_sample["src"].size(0)
+        batch_TR_sample_list=[]
+        for start_idx in range(0,n_TR_sample,batch_size):
+            end_idx=min(start_idx+batch_size,n_TR_sample)
+            batch_TR_sample={
+                key:value[start_idx:end_idx]
+                for key,value in TR_sample.items()
+            }
+            batch_TR_sample_list.append(batch_TR_sample)
+        return batch_TR_sample_list
+
+    @staticmethod
+    def get_fine_grained_TR_sample_list(
+            n_pair:int,
+            data_loader:DataLoader,
+            TR_label:torch.Tensor
+        ):
+        """
+        GNN-based Model 학습용 TR_sample_list 반환.
+
+        Input:
+            n_pair
+            data_loader
+            TR_label: [batch_len,N+1,N+1] bool tensor
+        Return:
+            TR_sample_list
+        """
+        TR_sample_list=[]
+        for batch_idx,(src,dst,event_t,_) in tqdm(
+                enumerate(data_loader),
+                desc="Generating TR samples..."
+            ):
+            sources=torch.unique(torch.cat([src,dst])).tolist()
+            query_time=event_t.max().item()
+            TR_sample=TrainUtils.random_TR_sampling(
+                sources=sources,
+                n_pair=n_pair,
+                query_time=query_time,
+                TR_label=TR_label[batch_idx]
+            )
+            TR_sample_list.append(TR_sample)
+        return TR_sample_list
 
 class EarlyStopper:
     def __init__(self,

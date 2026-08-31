@@ -9,9 +9,9 @@ class DyGFormer(nn.Module):
             edge_dim:int,
             latent_dim:int,
             time_dim:int,
-            embed_dim:int,
             co_dim:int,
             common_dim:int,
+            embed_dim:int,
             graph:DyGFormer_Graph,
             n_neighbor:int,
             n_layer:int,
@@ -24,9 +24,9 @@ class DyGFormer(nn.Module):
         self.edge_dim=edge_dim
         self.latent_dim=latent_dim
         self.time_dim=time_dim
-        self.embed_dim=embed_dim
         self.co_dim=co_dim
         self.common_dim=common_dim
+        self.embed_dim=embed_dim
         self.graph=graph
         self.n_neighbor=n_neighbor
         self.n_layer=n_layer

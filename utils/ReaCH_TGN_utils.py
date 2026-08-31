@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 class ReaCH_TGN_Utils:
     @staticmethod
@@ -32,6 +33,8 @@ class ReaCH_TGN_Utils:
 
     @staticmethod
     def compute_NT_Xent_Loss(
+            src:torch.Tensor,
+            dst:torch.Tensor,
             Z_src_A:torch.Tensor,
             Z_dst_A:torch.Tensor,
             Z_src_B:torch.Tensor,
@@ -40,7 +43,7 @@ class ReaCH_TGN_Utils:
         ):
         """
         대조 학습을 위한 NT_Xent Loss 계산
-        positive pair: 동일 노드의 다른 embedding 표현 = 동일 위치의 embedding
+        positive pair: node ID가 같은 embedding 표현
 
         Z_src_A: A augmentation view의 src node embedding 
         Z_dst_A: A augmentation view의 dst node embedding 
@@ -48,6 +51,8 @@ class ReaCH_TGN_Utils:
         Z_dst_B: B augmentation view의 dst node embedding 
 
         Input:
+            src: [B,] source node ID
+            dst: [B,] destination node ID
             Z_src_A: [B,embed_dim]
             Z_dst_A: [B,embed_dim]
             Z_src_B: [B,embed_dim]
@@ -66,28 +71,36 @@ class ReaCH_TGN_Utils:
 
         # 두 view 결합
         Z=torch.cat([Z_A,Z_B],dim=0) # [4B,D]
-        n=Z_A.size(0) # 2B
+        node_ids=torch.cat([src,dst],dim=0) # [2B]
+        all_node_ids=torch.cat([node_ids,node_ids],dim=0) # [4B]
 
         # pairwise cosine similarity
         logits=Z@Z.T/temperature # [4B,4B]
 
         # 자기 자신과의 similarity 제외
-        mask=torch.eye(
-            2*n,
+        self_mask=torch.eye(
+            Z.size(0),
             dtype=torch.bool,
             device=Z.device
         )
-        logits=logits.masked_fill(mask,float("-inf"))
+        logits=logits.masked_fill(self_mask,float("-inf"))
 
-        # Positive pair index
-        # Z_A[i] <-> Z_B[i]
-        target=torch.cat([
-            torch.arange(n,2*n,device=Z.device),
-            torch.arange(n,device=Z.device)
-        ]) # [4B]
-        return F.cross_entropy(logits,target)
+        # view와 위치에 관계없이 node ID가 같은 모든 표현을 positive로 사용
+        positive_mask=(
+            all_node_ids.unsqueeze(0)==all_node_ids.unsqueeze(1)
+        )&~self_mask
 
-    def compute_hop_based_penalty(self,
+        # 각 anchor에 대한 multi-positive NT-Xent loss
+        log_prob=logits-torch.logsumexp(logits,dim=1,keepdim=True)
+        positive_count=positive_mask.sum(dim=1)
+        loss_per_anchor=-(
+            log_prob.masked_fill(~positive_mask,0.0).sum(dim=1)
+            /positive_count
+        )
+        return loss_per_anchor.mean()
+
+    @staticmethod
+    def compute_hop_based_penalty(
             pair_hop:torch.Tensor,
             max_hop:int=5,
             gamma:float=1.0
@@ -108,10 +121,11 @@ class ReaCH_TGN_Utils:
         weight=(max_hop-pair_hop+1).float().pow(gamma)
         return weight # positive pair의 BCE loss를 sample별로 계산한 뒤 hop weight를 곱해주면 된다: pos_loss=pos_loss*hop_weight
 
-    def compute_time_gap_penalty(self,
+    @staticmethod
+    def compute_time_gap_penalty(
             pair_first_t:torch.Tensor,
             query_time:float,
-            decay_lambda:float=1e-5
+            decay_lambda:float=0.01
         ):
         """
         Time-Gap Penalty

@@ -42,6 +42,7 @@ def test_fn(**kwargs):
             max_hop=5
             n_sample=1000
             n_pair=10
+            evaluate_type=kwargs["evaluate_type"]
 
             ### 모델 관련 파라미터
             n_layer=2
@@ -66,6 +67,7 @@ def test_fn(**kwargs):
                 "max_hop":max_hop,
                 "n_sample":n_sample,
                 "n_pair":n_pair,
+                "evaluate_type":evaluate_type,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -105,11 +107,6 @@ def test_fn(**kwargs):
                 purpose="val"
             )
             val_TR_label=val_TR_result["TR_label"]
-            val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                n_pair=n_pair,
-                data_loader=val_loader,
-                TR_label=val_TR_label
-            )
             test_TR_result=DataUtils.load_TR_result(
                 dataset_name=f"enron",
                 max_hop=max_hop,
@@ -117,11 +114,35 @@ def test_fn(**kwargs):
                 purpose="test"
             )
             test_TR_label=test_TR_result["TR_label"]
-            test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                n_pair=n_pair,
-                data_loader=test_loader,
-                TR_label=test_TR_label
-            )
+            if evaluate_type=="coarse_grained":
+                n_node=graph.get_num_node()
+                val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
+                    n_node=n_node,
+                    n_sample=n_sample,
+                    n_pair=n_pair,
+                    query_time=val_query_time,
+                    batch_size=batch_size,
+                    TR_label=val_TR_label
+                )
+                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_node=n_node,
+                    n_sample=n_sample,
+                    n_pair=n_pair,
+                    query_time=test_query_time,
+                    batch_size=batch_size,
+                    TR_label=test_TR_label
+                )
+            else: # fine_grained
+                val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_pair=n_pair,
+                    data_loader=val_loader,
+                    TR_label=val_TR_label
+                )
+                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_pair=n_pair,
+                    data_loader=test_loader,
+                    TR_label=test_TR_label
+                )
 
             ### set model and train
             model=TGAT(
@@ -174,6 +195,7 @@ def test_fn(**kwargs):
             max_hop=5
             n_sample=1000
             n_pair=10
+            evaluate_type=kwargs["evaluate_type"]
 
             ### 모델 관련 파라미터
             n_layer=2
@@ -200,6 +222,7 @@ def test_fn(**kwargs):
                 "max_hop":max_hop,
                 "n_sample":n_sample,
                 "n_pair":n_pair,
+                "evaluate_type":evaluate_type,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -241,11 +264,6 @@ def test_fn(**kwargs):
                 purpose="val"
             )
             val_TR_label=val_TR_result["TR_label"]
-            val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                n_pair=n_pair,
-                data_loader=val_loader,
-                TR_label=val_TR_label
-            )
             test_TR_result=DataUtils.load_TR_result(
                 dataset_name=f"enron",
                 max_hop=max_hop,
@@ -253,11 +271,35 @@ def test_fn(**kwargs):
                 purpose="test"
             )
             test_TR_label=test_TR_result["TR_label"]
-            test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                n_pair=n_pair,
-                data_loader=test_loader,
-                TR_label=test_TR_label
-            )
+            if evaluate_type=="coarse_grained":
+                n_node=graph.get_num_node()
+                val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
+                    n_node=n_node,
+                    n_sample=n_sample,
+                    n_pair=n_pair,
+                    query_time=val_query_time,
+                    batch_size=batch_size,
+                    TR_label=val_TR_label
+                )
+                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_node=n_node,
+                    n_sample=n_sample,
+                    n_pair=n_pair,
+                    query_time=test_query_time,
+                    batch_size=batch_size,
+                    TR_label=test_TR_label
+                )
+            else: # fine_grained
+                val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_pair=n_pair,
+                    data_loader=val_loader,
+                    TR_label=val_TR_label
+                )
+                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_pair=n_pair,
+                    data_loader=test_loader,
+                    TR_label=test_TR_label
+                )
 
             ### set model and train
             model=TGN(
@@ -312,6 +354,7 @@ def test_fn(**kwargs):
             max_hop=5
             n_sample=1000
             n_pair=10
+            evaluate_type=kwargs["evaluate_type"]
 
             ### 모델 관련 파라미터
             n_layer=2
@@ -340,6 +383,7 @@ def test_fn(**kwargs):
                 "max_hop":max_hop,
                 "n_sample":n_sample,
                 "n_pair":n_pair,
+                "evaluate_type":evaluate_type,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -383,11 +427,6 @@ def test_fn(**kwargs):
                 purpose="val"
             )
             val_TR_label=val_TR_result["TR_label"]
-            val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                n_pair=n_pair,
-                data_loader=val_loader,
-                TR_label=val_TR_label
-            )
             test_TR_result=DataUtils.load_TR_result(
                 dataset_name=f"enron",
                 max_hop=max_hop,
@@ -395,11 +434,35 @@ def test_fn(**kwargs):
                 purpose="test"
             )
             test_TR_label=test_TR_result["TR_label"]
-            test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                n_pair=n_pair,
-                data_loader=test_loader,
-                TR_label=test_TR_label
-            )
+            if evaluate_type=="coarse_grained":
+                n_node=graph.get_num_node()
+                val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
+                    n_node=n_node,
+                    n_sample=n_sample,
+                    n_pair=n_pair,
+                    query_time=val_query_time,
+                    batch_size=batch_size,
+                    TR_label=val_TR_label
+                )
+                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_node=n_node,
+                    n_sample=n_sample,
+                    n_pair=n_pair,
+                    query_time=test_query_time,
+                    batch_size=batch_size,
+                    TR_label=test_TR_label
+                )
+            else: # fine_grained
+                val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_pair=n_pair,
+                    data_loader=val_loader,
+                    TR_label=val_TR_label
+                )
+                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_pair=n_pair,
+                    data_loader=test_loader,
+                    TR_label=test_TR_label
+                )
 
             ### set model and train
             model=DyGFormer(
@@ -456,6 +519,7 @@ def test_fn(**kwargs):
             max_hop=5
             n_sample=1000
             n_pair=10
+            evaluate_type=kwargs["evaluate_type"]
 
             ### 모델 관련 파라미터
             n_layer=2
@@ -482,6 +546,7 @@ def test_fn(**kwargs):
                 "max_hop":max_hop,
                 "n_sample":n_sample,
                 "n_pair":n_pair,
+                "evaluate_type":evaluate_type,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -522,11 +587,6 @@ def test_fn(**kwargs):
                 purpose="val"
             )
             val_TR_label=val_TR_result["TR_label"]
-            val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                n_pair=n_pair,
-                data_loader=val_loader,
-                TR_label=val_TR_label
-            )
             test_TR_result=DataUtils.load_TR_result(
                 dataset_name=f"enron",
                 max_hop=max_hop,
@@ -534,11 +594,35 @@ def test_fn(**kwargs):
                 purpose="test"
             )
             test_TR_label=test_TR_result["TR_label"]
-            test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                n_pair=n_pair,
-                data_loader=test_loader,
-                TR_label=test_TR_label
-            )
+            if evaluate_type=="coarse_grained":
+                n_node=graph.get_num_node()
+                val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
+                    n_node=n_node,
+                    n_sample=n_sample,
+                    n_pair=n_pair,
+                    query_time=val_query_time,
+                    batch_size=batch_size,
+                    TR_label=val_TR_label
+                )
+                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_node=n_node,
+                    n_sample=n_sample,
+                    n_pair=n_pair,
+                    query_time=test_query_time,
+                    batch_size=batch_size,
+                    TR_label=test_TR_label
+                )
+            else: # fine_grained
+                val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_pair=n_pair,
+                    data_loader=val_loader,
+                    TR_label=val_TR_label
+                )
+                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                    n_pair=n_pair,
+                    data_loader=test_loader,
+                    TR_label=test_TR_label
+                )
 
             ### set model and train
             model=ReaCH_TGN(
@@ -581,8 +665,14 @@ if __name__=="__main__":
         choices=["TGAT","TGN","DyGFormer","ReaCH-TGN"],
         default=f"TGAT"
     )
+    parser.add_argument("--evaluate_type",
+        type=str,
+        choices=["coarse_grained","fine_grained"],
+        default=f"coarse_grained"
+    )
     args=parser.parse_args()
     test_config={
-        "model_name":args.model_name
+        "model_name":args.model_name,
+        "evaluate_type":args.evaluate_type
     }
     test_fn(**test_config)

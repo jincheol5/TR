@@ -124,7 +124,7 @@ def test_fn(**kwargs):
                     batch_size=batch_size,
                     TR_label=val_TR_label
                 )
-                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
                     n_node=n_node,
                     n_sample=n_sample,
                     n_pair=n_pair,
@@ -281,7 +281,7 @@ def test_fn(**kwargs):
                     batch_size=batch_size,
                     TR_label=val_TR_label
                 )
-                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
                     n_node=n_node,
                     n_sample=n_sample,
                     n_pair=n_pair,
@@ -444,7 +444,7 @@ def test_fn(**kwargs):
                     batch_size=batch_size,
                     TR_label=val_TR_label
                 )
-                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
                     n_node=n_node,
                     n_sample=n_sample,
                     n_pair=n_pair,
@@ -604,7 +604,7 @@ def test_fn(**kwargs):
                     batch_size=batch_size,
                     TR_label=val_TR_label
                 )
-                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+                test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
                     n_node=n_node,
                     n_sample=n_sample,
                     n_pair=n_pair,

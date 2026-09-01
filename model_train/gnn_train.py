@@ -130,7 +130,7 @@ class GNNModelTrainer:
                         **kwargs
                     )
             val_acc=val_result["acc"]
-            print(f"Validate ACC ({kwargs["evaluate_type"]}): {val_acc}")
+            print(f"Validate ACC ({kwargs['evaluate_type']}): {val_acc}")
 
             """
             Check Early Stop

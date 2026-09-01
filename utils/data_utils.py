@@ -217,6 +217,7 @@ class DataUtils:
         ):
         TR_result_file_name=f"{dataset_name}_H{max_hop}_B{batch_size}_{purpose}.pt"
         TR_result_file_path=os.path.join(DataUtils.base_path,dataset_name,f"TR_result",TR_result_file_name)
+        os.makedirs(os.path.dirname(TR_result_file_path),exist_ok=True)
         torch.save(TR_result,TR_result_file_path)
         print(f"Save {TR_result_file_name}!")
 

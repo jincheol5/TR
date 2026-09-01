@@ -37,35 +37,44 @@ class DataUtils:
                     names=["u","i","t"],
                 )
 
-        # 결측값 제거
-        graph_df=graph_df.dropna(
-            subset=["u","i","t"]
-        ).copy()
-
-        # 자료형 변환
-        graph_df["u"]=graph_df["u"].astype(int)
-        graph_df["i"]=graph_df["i"].astype(int)
-        graph_df["t"]=(
-            pd.to_numeric(graph_df)
-            .floordiv(24*60*60)
+        # 숫자로 변환할 수 없는 값은 결측값으로 처리한 뒤 제거
+        graph_df=graph_df[["u","i","t"]].apply(
+            pd.to_numeric,
+            errors="coerce"
+        )
+        graph_df=(
+            graph_df.dropna(subset=["u","i","t"])
             .astype(np.int64)
+            .reset_index(drop=True)
         )
 
         # self-loop 제거
         self_loop_mask=graph_df["u"]==graph_df["i"]
         graph_df=graph_df.loc[~self_loop_mask].copy()
 
-        # 동일한 방향의 edge가 같은 시간에 여러 번 발생한 경우 첫 event만 유지
-        graph_df=(
-            graph_df.drop_duplicates(
-                subset=["u","i","t"],
-                keep="first"
-            )
+        # Unix timestamp(초)를 day 단위로 변환하고 최초 시각을 0으로 조정
+        graph_df["t"]=(graph_df["t"]//(24*60*60)).astype(np.int64)
+        min_event_time=graph_df["t"].min()
+        graph_df["t"]=(graph_df["t"]-min_event_time).astype(np.int64)
+
+        # 같은 방향의 동일 edge event는 하나만 유지
+        graph_df=graph_df.drop_duplicates(
+            subset=["u","i","t"],
+            keep="first"
         )
 
-        # 최초 event 시각을 0으로 맞춘 상대 Unix timestamp(day)로 변환
-        min_t=graph_df["t"].min()
-        graph_df["t"]=(graph_df["t"]-min_t).astype(np.int64)
+        # 동일 시각의 a→b와 b→a는 undirected edge 하나로 취급
+        graph_df["_node_min"]=graph_df[["u","i"]].min(axis=1)
+        graph_df["_node_max"]=graph_df[["u","i"]].max(axis=1)
+        graph_df=(
+            graph_df.drop_duplicates(
+                subset=["_node_min","_node_max","t"],
+                keep="first"
+            )
+            .drop(columns=["_node_min","_node_max"])
+        )
+
+        # event time 순으로 정렬
         graph_df=(
             graph_df.sort_values("t",kind="stable")
             .reset_index(drop=True)
@@ -86,15 +95,15 @@ class DataUtils:
         }
 
         # node ID 재매핑
-        graph_df["u"]=graph_df["u"].map(node_mapping).astype(int)
-        graph_df["i"]=graph_df["i"].map(node_mapping).astype(int)
+        graph_df["u"]=graph_df["u"].map(node_mapping).astype(np.int64)
+        graph_df["i"]=graph_df["i"].map(node_mapping).astype(np.int64)
 
         # 중복 제거된 시간순 event에 맞춰 edge ID를 1 ~ E로 재매핑
         graph_df["idx"]=np.arange(1,len(graph_df)+1,dtype=np.int64)
 
         return {
             "graph_df":graph_df,
-            "n_node":max(graph_df["u"].max(),graph_df["i"].max()),
+            "n_node":len(node_ids),
             "max_u":graph_df["u"].max(),
             "node_dim":None,
             "edge_dim":None,
@@ -134,10 +143,26 @@ class DataUtils:
             .astype(np.int64)
         )
 
+        # 최초 event 시각을 0으로 맞춘 상대 Unix timestamp(day)로 변환
+        min_event_time=graph_df["t"].min()
+        graph_df["t"]=(graph_df["t"]-min_event_time).astype(np.int64)
+
         ### remove self-loop, 동일한 시각의 동일한 방향 edge(u -> i)는 하나만 유지
         graph_df=(
             graph_df[graph_df["u"]!=graph_df["i"]]
             .drop_duplicates(subset=["u","i","t"],keep="first")
+            .reset_index(drop=True)
+        )
+
+        # 동일 시각의 a→b와 b→a는 undirected edge 하나로 취급
+        graph_df["_node_min"]=graph_df[["u","i"]].min(axis=1)
+        graph_df["_node_max"]=graph_df[["u","i"]].max(axis=1)
+        graph_df=(
+            graph_df.drop_duplicates(
+                subset=["_node_min","_node_max","t"],
+                keep="first"
+            )
+            .drop(columns=["_node_min","_node_max"])
             .reset_index(drop=True)
         )
 

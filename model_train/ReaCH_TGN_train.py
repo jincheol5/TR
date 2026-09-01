@@ -284,3 +284,171 @@ class ReaCH_TGN_Trainer:
             "loss":torch.stack(loss_list).mean().item(),
             "acc":sum(acc_list)/len(acc_list)
         }
+
+
+    @staticmethod
+    def evaluate_model_for_fine_grained_TR(
+            model:nn.Module,
+            val_loader:DataLoader,
+            test_loader:DataLoader,
+            test_sample_list:list,
+            **kwargs
+        ):
+        """
+        Memory-based GNN의 경우 evaluate_model 전에 val_loader에 대해 memory update 수행되어야 함.
+        """
+        if torch.cuda.is_available():
+            device=torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device=torch.device("mps")
+        else:
+            device=torch.device("cpu")
+        model.to(device)
+        model.graph.to_device(device=device)
+        model.eval()
+
+        """
+        update memory for validate eventstream
+        """
+        for event_src,event_dst,event_t,event_edge in tqdm(
+                val_loader,
+                desc=f"validate eventstream에 대한 memory update 수행..."
+            ):
+            event_src=event_src.to(device)
+            event_dst=event_dst.to(device)
+            event_t=event_t.to(device)
+            event_edge=event_edge.to(device)
+            model.update_model_memory(
+                src=event_src,
+                dst=event_dst,
+                event_t=event_t,
+                edge=event_edge
+            )
+
+        """
+        compute test acc
+        """
+        acc_list=[]
+        with torch.no_grad():
+            for batch_event,batch_sample in tqdm(
+                    zip(test_loader,test_sample_list),
+                    total=len(test_sample_list),
+                    desc=f"Compute Test Acc..."
+                ):
+                ### Eventstream
+                event_src,event_dst,event_t,event_edge=batch_event
+                event_src=event_src.to(device)
+                event_dst=event_dst.to(device)
+                event_t=event_t.to(device)
+                event_edge=event_edge.to(device)
+                model.update_model_memory(
+                    src=event_src,
+                    dst=event_dst,
+                    event_t=event_t,
+                    edge=event_edge
+                )
+
+                ### TR Sample
+                src=batch_sample["src"]
+                dst=batch_sample["dst"]
+                query_t=batch_sample["query_t"]
+                label=batch_sample["label"]
+                src=src.to(device)
+                dst=dst.to(device)
+                query_t=query_t.to(device)
+                label=label.to(device)
+
+                pred_logit=model(
+                    src=src,
+                    dst=dst,
+                    event_t=query_t
+                ) # [B,1]
+
+                ### ACC
+                pred_logit=pred_logit.squeeze(-1) # -> [B,]
+                batch_acc=Metric.compute_accuracy(
+                    pred_logit=pred_logit,
+                    label=label
+                )
+                acc_list.append(batch_acc)
+        return sum(acc_list)/len(acc_list)
+
+    @staticmethod
+    def evaluate_model_for_coarse_grained_TR(
+            model:nn.Module,
+            val_loader:DataLoader,
+            test_loader:DataLoader,
+            test_sample_list:list,
+            **kwargs
+        ):
+        """
+        Memory-based GNN의 경우 evaluate_model 전에 val_loader에 대해 memory update 수행되어야 함.
+        """
+        if torch.cuda.is_available():
+            device=torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device=torch.device("mps")
+        else:
+            device=torch.device("cpu")
+        model.to(device)
+        model.graph.to_device(device=device)
+        model.eval()
+
+        """
+        update memory for validate eventstream
+        """
+        for event_src,event_dst,event_t,event_edge in tqdm(
+                val_loader,
+                desc=f"validate eventstream에 대한 memory update 수행..."
+            ):
+            event_src=event_src.to(device)
+            event_dst=event_dst.to(device)
+            event_t=event_t.to(device)
+            event_edge=event_edge.to(device)
+            model.update_model_memory(
+                src=event_src,
+                dst=event_dst,
+                event_t=event_t,
+                edge=event_edge
+            )
+
+        """
+        compute test acc
+        """
+        acc_list=[]
+        with torch.no_grad():
+            for event_src,event_dst,event_t,event_edge in tqdm(
+                    test_loader,
+                    desc=f"test eventstream에 대한 memory update 수행..."
+                ):
+                event_src=event_src.to(device)
+                event_dst=event_dst.to(device)
+                event_t=event_t.to(device)
+                event_edge=event_edge.to(device)
+                model.update_model_memory(
+                    src=event_src,
+                    dst=event_dst,
+                    event_t=event_t,
+                    edge=event_edge
+                )
+
+            for src,dst,query_t,label in tqdm(test_sample_list,desc=f"Evaluating..."):
+                src=src.to(device)
+                dst=dst.to(device)
+                query_t=query_t.to(device)
+                label=label.to(device)
+
+                pred_logit=model(
+                    src=src,
+                    dst=dst,
+                    event_t=query_t
+                ) # [B,1]
+
+                ### ACC
+                pred_logit=pred_logit.squeeze(-1) # -> [B,]
+                batch_acc=Metric.compute_accuracy(
+                    pred_logit=pred_logit,
+                    label=label
+                )
+                acc_list.append(batch_acc)
+        return sum(acc_list)/len(acc_list)

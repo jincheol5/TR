@@ -255,7 +255,11 @@ class ReaCH_TGN_Trainer:
                         edge=event_edge
                     )
 
-            for src,dst,query_t,label in tqdm(val_sample_list,desc=f"Evaluating..."):
+            for batch_sample in tqdm(val_sample_list,desc=f"Evaluating..."):
+                src=batch_sample["src"]
+                dst=batch_sample["dst"]
+                query_t=batch_sample["query_t"]
+                label=batch_sample["label"]
                 src=src.to(device)
                 dst=dst.to(device)
                 query_t=query_t.to(device)
@@ -423,7 +427,11 @@ class ReaCH_TGN_Trainer:
                     edge=event_edge
                 )
 
-            for src,dst,query_t,label in tqdm(test_sample_list,desc=f"Evaluating..."):
+            for batch_sample in tqdm(test_sample_list,desc=f"Evaluating..."):
+                src=batch_sample["src"]
+                dst=batch_sample["dst"]
+                query_t=batch_sample["query_t"]
+                label=batch_sample["label"]
                 src=src.to(device)
                 dst=dst.to(device)
                 query_t=query_t.to(device)

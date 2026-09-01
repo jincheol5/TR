@@ -47,7 +47,7 @@ def test_fn(**kwargs):
             # 모델 학습 관련
             embed_dim=32
             latent_dim=32
-            epoch=3
+            epoch=100
             lr=0.0005
             optimizer=f"adam"
             early_stop=True
@@ -176,7 +176,7 @@ def test_fn(**kwargs):
             # 모델 학습 관련
             embed_dim=32
             latent_dim=32
-            epoch=3
+            epoch=100
             lr=0.0005
             optimizer=f"adam"
             early_stop=True

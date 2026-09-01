@@ -52,7 +52,7 @@ def test_fn(**kwargs):
             time_dim=32
             latent_dim=32
             embed_dim=32
-            epoch=1
+            epoch=100
             lr=0.0005
             optimizer=f"adam"
             early_stop=True
@@ -186,7 +186,7 @@ def test_fn(**kwargs):
             msg_dim=32
             mem_dim=32
             embed_dim=32
-            epoch=1
+            epoch=100
             lr=0.0005
             optimizer=f"adam"
             early_stop=True
@@ -326,7 +326,7 @@ def test_fn(**kwargs):
             co_dim=32
             common_dim=32
             embed_dim=32
-            epoch=1
+            epoch=100
             lr=0.0005
             optimizer=f"adam"
             early_stop=True

@@ -62,11 +62,74 @@ class TemporalGraph:
     def get_num_event(self):
         return self.n_event
 
+    def compute_SR(self,
+            source:int,
+            query_time:float|None=None,
+            max_hop:int|None=None
+        ):
+        """
+        Compute Static Reachability 
+        - min_hop
+        - Static Reachability라 하더라도 계산에 사용되는 edge 정보는 query time 이전 edge들로 한다.
+        """
+        if max_hop is None:
+            max_hop=self.n_node-1
+
+        INF=float("inf")
+        reach_info={
+            node:{
+                "r":0,
+                "hop":INF
+            }
+            for node in range(1,self.n_node+1)
+        }
+        reach_info[source]={
+            "r":1,
+            "hop":0
+        }
+        current={source}
+        for hop in range(1,max_hop+1):
+            next_state=set()
+            for node in current:
+                times=self.adj_t[node]
+                neighbors=self.adj[node]
+                end=(
+                    len(times)
+                    if query_time is None
+                    else np.searchsorted(
+                        times,
+                        query_time,
+                        side="right"
+                    )
+                )
+                for idx in range(end):
+                    dst=int(neighbors[idx])
+
+                    # 이전 hop에서 이미 방문한 node
+                    if reach_info[dst]["r"]==1:
+                        continue
+                    next_state.add(dst)
+
+            if not next_state:
+                break
+
+            for node in next_state:
+                reach_info[node]={
+                    "r":1,
+                    "hop":hop
+                }
+            current=next_state
+        return reach_info
+
     def compute_TR(self,
             source:int,
             query_time:float|None=None,
             max_hop:int|None=None
         ):
+        """
+        Compute Temporal Reachability
+        - Min hop
+        """
         if max_hop is None:
             max_hop=self.n_node-1
 
@@ -158,10 +221,7 @@ class TemporalGraph:
             current=next_state
         return TR_info
 
-    
-
-
-    def random_TR_sampling_old(self,
+    def random_TR_sampling(self,
             n_sample:int,
             n_pair:int,
             query_time:float|None=None,

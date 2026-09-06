@@ -44,6 +44,53 @@ class TrainUtils:
         test_df=df.iloc[val_end:].reset_index(drop=True)
         return train_df,val_df,test_df
 
+
+    @staticmethod
+    def get_SR_result(
+            graph:TemporalGraph,
+            data_loader:DataLoader,
+            max_hop:int
+        ):
+        """
+        Static Reachability라 하더라도 계산에 사용되는 edge 정보는 query time 이전 edge들로 한다.
+
+        Input:
+            graph
+            data_loader
+            max_hop
+        Return:
+            SR_result: dict
+                SR_label: [seq_len,N+1,N+1], boolean tensor
+                SR_hop: [seq_len,N+1,N+1], int8 tensor
+        """
+        n_node=graph.get_num_node()
+        SR_result=torch.zeros(
+            (len(data_loader),n_node+1,n_node+1),
+            dtype=torch.bool
+        )
+        SR_hop=torch.zeros(
+            (len(data_loader),n_node+1,n_node+1),
+            dtype=torch.int8
+        )
+        for seq_idx,(_,_,event_t,_) in enumerate(tqdm(data_loader,desc="Compute SR result tensor...")):
+            query_time=event_t.max().item()
+            for source in range(1,n_node+1):
+                SR_info=graph.compute_SR(
+                    source=source,
+                    query_time=query_time,
+                    max_hop=max_hop
+                )
+                for dst in range(1,n_node+1):
+                    info=SR_info[dst]
+                    if not info["r"]:
+                        continue
+                    SR_result[seq_idx,source,dst]=True
+                    SR_hop[seq_idx,source,dst]=int(info["hop"])
+        return {
+            "SR_label":SR_result,
+            "SR_hop":SR_hop
+        }
+
     @staticmethod
     def get_TR_result(
             graph:TemporalGraph,

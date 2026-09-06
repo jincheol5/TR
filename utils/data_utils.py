@@ -224,6 +224,29 @@ class DataUtils:
                 return DataUtils._preprocess_zenodo_dataset(dataset_name=dataset_name)
 
     @staticmethod
+    def save_SR_result(
+            SR_result:dict[str,torch.Tensor],
+            dataset_name:Literal[
+                "CollegeMsg"
+                "bitcoin-otc",
+                "bitcoin-alpha",
+                "enron"
+            ],
+            max_hop:int,
+            batch_size:int,
+            purpose:Literal[
+                "train",
+                "val",
+                "test"
+            ]
+        ):
+        SR_result_file_name=f"{dataset_name}_H{max_hop}_B{batch_size}_{purpose}.pt"
+        SR_result_file_path=os.path.join(DataUtils.base_path,dataset_name,f"SR_result",SR_result_file_name)
+        os.makedirs(os.path.dirname(SR_result_file_path),exist_ok=True)
+        torch.save(SR_result,SR_result_file_path)
+        print(f"Save {SR_result_file_name}!")
+
+    @staticmethod
     def save_TR_result(
             TR_result:dict[str,torch.Tensor],
             dataset_name:Literal[
@@ -247,6 +270,35 @@ class DataUtils:
         print(f"Save {TR_result_file_name}!")
 
     @staticmethod
+    def load_SR_result(
+            dataset_name:Literal[
+                "CollegeMsg"
+                "bitcoin-otc",
+                "bitcoin-alpha",
+                "enron"
+            ],
+            max_hop:int,
+            batch_size:int,
+            purpose:Literal[
+                "train",
+                "val",
+                "test"
+            ]
+        ):
+        """
+        Return: Static Reachability Result
+            SR_result: dict
+                SR_label:
+                SR_hop:
+                SR_first_t:
+                SR_last_t:
+        """
+        SR_result_file_name=f"{dataset_name}_H{max_hop}_B{batch_size}_{purpose}.pt"
+        SR_result_file_path=os.path.join(DataUtils.base_path,dataset_name,f"SR_result",SR_result_file_name)
+        SR_result=torch.load(SR_result_file_path)
+        return SR_result
+
+    @staticmethod
     def load_TR_result(
             dataset_name:Literal[
                 "CollegeMsg"
@@ -267,8 +319,8 @@ class DataUtils:
             TR_result: dict
                 TR_label:
                 TR_hop:
-                TR_last_t:
                 TR_first_t:
+                TR_last_t:
         """
         TR_result_file_name=f"{dataset_name}_H{max_hop}_B{batch_size}_{purpose}.pt"
         TR_result_file_path=os.path.join(DataUtils.base_path,dataset_name,f"TR_result",TR_result_file_name)

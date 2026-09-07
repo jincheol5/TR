@@ -153,6 +153,12 @@ class TrainUtils:
             "TR_first_t":TR_first_t
         }
 
+
+    """
+    Hard TR Sampling 작성
+    """
+
+
     @staticmethod
     def random_src_TR_sampling(
             n_node:int,

@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
-import torch.nn.functional as F
+from typing import Literal
 from tqdm import tqdm
 from torch.utils.data import Dataset,DataLoader
 from graph import TemporalGraph
@@ -276,6 +276,56 @@ class TrainUtils:
             TR_sample_list.append(TR_sample)
         return TR_sample_list
 
-
-
-
+    @staticmethod
+    def get_TR_sample_list(
+            n_pair:int,
+            data_loader:DataLoader,
+            SR_result:dict[str,torch.Tensor],
+            TR_result:dict[str,torch.Tensor],
+            sampling:Literal["random","hard"]
+        ):
+        """
+        Input:
+            n_pair
+            data_loader
+            SR_result
+            TR_result
+            sampling
+        Return:
+            TR_sample_list
+        """
+        SR_label=SR_result["SR_label"]
+        SR_hop=SR_result["SR_hop"]
+        TR_label=TR_result["TR_label"]
+        TR_hop=TR_result["TR_hop"]
+        TR_last_t=TR_result["TR_last_t"]
+        TR_sample_list=[]
+        for batch_idx,(src,dst,event_t,_) in tqdm(
+                enumerate(data_loader),
+                desc="Generating TR samples..."
+            ):
+            sources=torch.unique(torch.cat([src,dst])).tolist()
+            start_query_time=event_t.min().item()
+            end_query_time=event_t.max().item()
+            match sampling:
+                case "random":
+                    TR_sample=TR_Sampling.random_TR_sampling(
+                        sources=sources,
+                        n_pair=n_pair,
+                        query_time=end_query_time,
+                        TR_label=TR_label[batch_idx]
+                    )
+                case "hard":
+                    TR_sample=TR_Sampling.hard_TR_sampling(
+                        sources=sources,
+                        n_pair=n_pair,
+                        start_query_time=start_query_time,
+                        end_query_time=end_query_time,
+                        SR_label=SR_label[batch_idx],
+                        SR_hop=SR_hop[batch_idx],
+                        TR_label=TR_label[batch_idx],
+                        TR_hop=TR_hop[batch_idx],
+                        TR_last_t=TR_last_t[batch_idx]
+                    )
+            TR_sample_list.append(TR_sample)
+        return TR_sample_list

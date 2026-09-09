@@ -1,5 +1,4 @@
 import argparse
-import torch
 from torch.utils.data import DataLoader
 from utils import DataUtils,TrainUtils,TemporalGraphDataset
 from graph import TGN_Graph,DyGFormer_Graph
@@ -14,60 +13,109 @@ Test Model:
     - TGAT
     - TGN
     - DyGFormer
+    - ReaCH-TGN
 """
 def test_fn(**kwargs):
+    ### set dataset and graph
+    data=DataUtils.preprocess_graph_dataset(dataset_name=f"enron")
+    graph_df=data["graph_df"]
+    node_ft=data["node_ft"]
+    edge_ft=data["edge_ft"]
+    node_dim=data["node_dim"]
+    edge_dim=data["edge_dim"]
+    graph=TGN_Graph(
+        graph_df=graph_df,
+        node_ft=node_ft,
+        edge_ft=edge_ft,
+        node_dim=node_dim,
+        edge_dim=edge_dim
+    )
+    seed=1
+    graph.set_random_seed(seed=seed)
+
+    ### TR sample 관련 파라미터
+    batch_size=200
+    max_hop=5
+    n_pair=10
+    sampling=kwargs["sampling"]
+
+    ### 모델 관련 파라미터
+    n_layer=1
+    n_neighbor=10
+    n_head=4
+
+    ### 학습 관련 파라미터
+    time_dim=32
+    latent_dim=32
+    embed_dim=32
+    epoch=2
+    lr=0.0005
+    optimizer=f"adam"
+    early_stop=True
+    patience=10
+
+    ### set data_loader
+    train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
+    train_dataset=TemporalGraphDataset(df=train_df)
+    val_dataset=TemporalGraphDataset(df=val_df)
+    test_dataset=TemporalGraphDataset(df=test_df)
+    train_loader=DataLoader(dataset=train_dataset,batch_size=batch_size,shuffle=False)
+    val_loader=DataLoader(dataset=val_dataset,batch_size=batch_size,shuffle=False)
+    test_loader=DataLoader(dataset=test_dataset,batch_size=batch_size,shuffle=False)
+
+    ### load SR, TR result
+    train_SR_result=DataUtils.load_SR_result(
+        dataset_name=f"enron",
+        max_hop=max_hop,
+        batch_size=batch_size,
+        purpose="train"
+    )
+    train_TR_result=DataUtils.load_TR_result(
+        dataset_name=f"enron",
+        max_hop=max_hop,
+        batch_size=batch_size,
+        purpose="train"
+    )
+    val_TR_result=DataUtils.load_TR_result(
+        dataset_name=f"enron",
+        max_hop=max_hop,
+        batch_size=batch_size,
+        purpose="val"
+    )
+    test_TR_result=DataUtils.load_TR_result(
+        dataset_name=f"enron",
+        max_hop=max_hop,
+        batch_size=batch_size,
+        purpose="test"
+    )
+
+    ### set val, test sample_list using random sampling
+    val_sample_list=TrainUtils.get_TR_sample_list(
+        n_pair=n_pair,
+        data_loader=val_loader,
+        TR_result=val_TR_result,
+        sampling=f"random"
+    )
+    test_sample_list=TrainUtils.get_TR_sample_list(
+        n_pair=n_pair,
+        data_loader=test_loader,
+        TR_result=test_TR_result,
+        sampling=f"random"
+    )
+
     match kwargs["model_name"]:
         case "TGAT":
             """
             Test Model: TGAT
             """
-            data=DataUtils.preprocess_graph_dataset(dataset_name=f"enron")
-            graph_df=data["graph_df"]
-            node_ft=data["node_ft"]
-            edge_ft=data["edge_ft"]
-            node_dim=data["node_dim"]
-            edge_dim=data["edge_dim"]
-            graph=TGN_Graph(
-                graph_df=graph_df,
-                node_ft=node_ft,
-                edge_ft=edge_ft,
-                node_dim=node_dim,
-                edge_dim=edge_dim
-            )
-            seed=1
-            graph.set_random_seed(seed=seed)
-
-            ### TR sample 관련 파라미터
-            batch_size=200
-            max_hop=5
-            n_sample=1000
-            n_pair=10
-            evaluate_type=kwargs["evaluate_type"]
-
-            ### 모델 관련 파라미터
-            n_layer=2
-            n_neighbor=10
-            n_head=4
-
-            ### 학습 관련 파라미터
-            time_dim=32
-            latent_dim=32
-            embed_dim=32
-            epoch=100
-            lr=0.0005
-            optimizer=f"adam"
-            early_stop=True
-            patience=10
-
             ### model config
             model_config={
                 "model_name":kwargs["model_name"],
                 "seed":seed,
                 "batch_size":batch_size,
                 "max_hop":max_hop,
-                "n_sample":n_sample,
                 "n_pair":n_pair,
-                "evaluate_type":evaluate_type,
+                "sampling":sampling,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -81,69 +129,6 @@ def test_fn(**kwargs):
                 "patience":patience
             }
 
-            ### set data_loader
-            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
-            val_query_time=val_df["t"].max()
-            test_query_time=test_df["t"].max()
-            train_dataset=TemporalGraphDataset(df=train_df)
-            val_dataset=TemporalGraphDataset(df=val_df)
-            test_dataset=TemporalGraphDataset(df=test_df)
-            train_loader=DataLoader(dataset=train_dataset,batch_size=batch_size,shuffle=False)
-            val_loader=DataLoader(dataset=val_dataset,batch_size=batch_size,shuffle=False)
-            test_loader=DataLoader(dataset=test_dataset,batch_size=batch_size,shuffle=False)
-
-            ### set sample_list
-            train_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="train"
-            )
-            train_TR_label=train_TR_result["TR_label"]
-            val_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="val"
-            )
-            val_TR_label=val_TR_result["TR_label"]
-            test_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="test"
-            )
-            test_TR_label=test_TR_result["TR_label"]
-            if evaluate_type=="coarse_grained":
-                n_node=graph.get_num_node()
-                val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                    n_node=n_node,
-                    n_sample=n_sample,
-                    n_pair=n_pair,
-                    query_time=val_query_time,
-                    batch_size=batch_size,
-                    TR_label=val_TR_label
-                )
-                test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                    n_node=n_node,
-                    n_sample=n_sample,
-                    n_pair=n_pair,
-                    query_time=test_query_time,
-                    batch_size=batch_size,
-                    TR_label=test_TR_label
-                )
-            else: # fine_grained
-                val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                    n_pair=n_pair,
-                    data_loader=val_loader,
-                    TR_label=val_TR_label
-                )
-                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                    n_pair=n_pair,
-                    data_loader=test_loader,
-                    TR_label=test_TR_label
-                )
-
             ### set model and train
             model=TGAT(
                 node_dim=node_dim,
@@ -156,63 +141,28 @@ def test_fn(**kwargs):
                 n_neighbor=n_neighbor,
                 n_head=n_head
             )
-            model=GNNModelTrainer.train_model(
+            model=GNNModelTrainer.train(
                 model=model,
                 train_loader=train_loader,
                 val_loader=val_loader,
                 val_sample_list=val_sample_list,
-                TR_label=train_TR_label,
+                SR_result=train_SR_result,
+                TR_result=train_TR_result,
                 **model_config
             )
-            acc=GNNModelTrainer.evaluate_model_for_fine_grained_TR(
+            evaluate_result=GNNModelTrainer.evaluate(
                 model=model,
                 val_loader=val_loader,
                 test_loader=test_loader,
                 test_sample_list=test_sample_list,
                 **model_config
             )
-            print(f"Evaluate ACC: {acc}")
+            print(f"Evaluate ACC of {kwargs['model_name']} using {kwargs['sampling']} TR Sampling: {evaluate_result['acc']}")
 
         case "TGN":
-            data=DataUtils.preprocess_graph_dataset(dataset_name=f"enron")
-            graph_df=data["graph_df"]
-            node_ft=data["node_ft"]
-            edge_ft=data["edge_ft"]
-            node_dim=data["node_dim"]
-            edge_dim=data["edge_dim"]
-            graph=TGN_Graph(
-                graph_df=graph_df,
-                node_ft=node_ft,
-                edge_ft=edge_ft,
-                node_dim=node_dim,
-                edge_dim=edge_dim
-            )
-            seed=1
-            graph.set_random_seed(seed=seed)
-
-            ### TR sample 관련 파라미터
-            batch_size=200
-            max_hop=5
-            n_sample=1000
-            n_pair=10
-            evaluate_type=kwargs["evaluate_type"]
-
-            ### 모델 관련 파라미터
-            n_layer=2
-            n_neighbor=10
-            n_head=4
-
-            ### 학습 관련 파라미터
-            time_dim=32
-            latent_dim=32
+            ### TGN 학습 관련 파라미터
             msg_dim=32
             mem_dim=32
-            embed_dim=32
-            epoch=100
-            lr=0.0005
-            optimizer=f"adam"
-            early_stop=True
-            patience=5
 
             ### model config
             model_config={
@@ -220,9 +170,8 @@ def test_fn(**kwargs):
                 "seed":seed,
                 "batch_size":batch_size,
                 "max_hop":max_hop,
-                "n_sample":n_sample,
                 "n_pair":n_pair,
-                "evaluate_type":evaluate_type,
+                "sampling":sampling,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -238,69 +187,6 @@ def test_fn(**kwargs):
                 "patience":patience
             }
 
-            ### set data_loader
-            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
-            val_query_time=val_df["t"].max()
-            test_query_time=test_df["t"].max()
-            train_dataset=TemporalGraphDataset(df=train_df)
-            val_dataset=TemporalGraphDataset(df=val_df)
-            test_dataset=TemporalGraphDataset(df=test_df)
-            train_loader=DataLoader(dataset=train_dataset,batch_size=batch_size,shuffle=False)
-            val_loader=DataLoader(dataset=val_dataset,batch_size=batch_size,shuffle=False)
-            test_loader=DataLoader(dataset=test_dataset,batch_size=batch_size,shuffle=False)
-
-            ### set sample_list
-            train_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="train"
-            )
-            train_TR_label=train_TR_result["TR_label"]
-            val_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="val"
-            )
-            val_TR_label=val_TR_result["TR_label"]
-            test_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="test"
-            )
-            test_TR_label=test_TR_result["TR_label"]
-            if evaluate_type=="coarse_grained":
-                n_node=graph.get_num_node()
-                val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                    n_node=n_node,
-                    n_sample=n_sample,
-                    n_pair=n_pair,
-                    query_time=val_query_time,
-                    batch_size=batch_size,
-                    TR_label=val_TR_label
-                )
-                test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                    n_node=n_node,
-                    n_sample=n_sample,
-                    n_pair=n_pair,
-                    query_time=test_query_time,
-                    batch_size=batch_size,
-                    TR_label=test_TR_label
-                )
-            else: # fine_grained
-                val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                    n_pair=n_pair,
-                    data_loader=val_loader,
-                    TR_label=val_TR_label
-                )
-                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                    n_pair=n_pair,
-                    data_loader=test_loader,
-                    TR_label=test_TR_label
-                )
-
             ### set model and train
             model=TGN(
                 node_dim=node_dim,
@@ -315,30 +201,26 @@ def test_fn(**kwargs):
                 n_neighbor=n_neighbor,
                 n_head=n_head
             )   
-            model=GNNModelTrainer.train_model(
+            model=GNNModelTrainer.train(
                 model=model,
                 train_loader=train_loader,
                 val_loader=val_loader,
                 val_sample_list=val_sample_list,
-                TR_label=train_TR_label,
+                SR_result=train_SR_result,
+                TR_result=train_TR_result,
                 **model_config
             )
-            acc=GNNModelTrainer.evaluate_model_for_fine_grained_TR(
+            evaluate_result=GNNModelTrainer.evaluate(
                 model=model,
                 val_loader=val_loader,
                 test_loader=test_loader,
                 test_sample_list=test_sample_list,
                 **model_config
             )
-            print(f"Evaluate ACC: {acc}")
+            print(f"Evaluate ACC of {kwargs['model_name']} using {kwargs['sampling']} TR Sampling: {evaluate_result['acc']}")
 
         case "DyGFormer":
-            data=DataUtils.preprocess_graph_dataset(dataset_name=f"enron")
-            graph_df=data["graph_df"]
-            node_ft=data["node_ft"]
-            edge_ft=data["edge_ft"]
-            node_dim=data["node_dim"]
-            edge_dim=data["edge_dim"]
+            ### set DyGFormer graph
             graph=DyGFormer_Graph(
                 graph_df=graph_df,
                 node_ft=node_ft,
@@ -349,31 +231,13 @@ def test_fn(**kwargs):
             seed=1
             graph.set_random_seed(seed=seed)
 
-            ### TR sample 관련 파라미터
-            batch_size=200
-            max_hop=5
-            n_sample=1000
-            n_pair=10
-            evaluate_type=kwargs["evaluate_type"]
-
-            ### 모델 관련 파라미터
-            n_layer=2
-            n_neighbor=10
-            n_head=4
+            ### DyGFormer 모델 관련 파라미터
             max_seq_len=10
             patch_size=5
 
-            ### 학습 관련 파라미터
-            latent_dim=32
-            time_dim=32
+            ### DyGFormer 학습 관련 파라미터
             co_dim=32
             common_dim=32
-            embed_dim=32
-            epoch=100
-            lr=0.0005
-            optimizer=f"adam"
-            early_stop=True
-            patience=5
 
             ### model config
             model_config={
@@ -381,9 +245,8 @@ def test_fn(**kwargs):
                 "seed":seed,
                 "batch_size":batch_size,
                 "max_hop":max_hop,
-                "n_sample":n_sample,
                 "n_pair":n_pair,
-                "evaluate_type":evaluate_type,
+                "sampling":sampling,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -401,69 +264,6 @@ def test_fn(**kwargs):
                 "patience":patience
             }
 
-            ### set data_loader
-            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
-            val_query_time=val_df["t"].max()
-            test_query_time=test_df["t"].max()
-            train_dataset=TemporalGraphDataset(df=train_df)
-            val_dataset=TemporalGraphDataset(df=val_df)
-            test_dataset=TemporalGraphDataset(df=test_df)
-            train_loader=DataLoader(dataset=train_dataset,batch_size=batch_size,shuffle=False)
-            val_loader=DataLoader(dataset=val_dataset,batch_size=batch_size,shuffle=False)
-            test_loader=DataLoader(dataset=test_dataset,batch_size=batch_size,shuffle=False)
-
-            ### set sample_list
-            train_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="train"
-            )
-            train_TR_label=train_TR_result["TR_label"]
-            val_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="val"
-            )
-            val_TR_label=val_TR_result["TR_label"]
-            test_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="test"
-            )
-            test_TR_label=test_TR_result["TR_label"]
-            if evaluate_type=="coarse_grained":
-                n_node=graph.get_num_node()
-                val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                    n_node=n_node,
-                    n_sample=n_sample,
-                    n_pair=n_pair,
-                    query_time=val_query_time,
-                    batch_size=batch_size,
-                    TR_label=val_TR_label
-                )
-                test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                    n_node=n_node,
-                    n_sample=n_sample,
-                    n_pair=n_pair,
-                    query_time=test_query_time,
-                    batch_size=batch_size,
-                    TR_label=test_TR_label
-                )
-            else: # fine_grained
-                val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                    n_pair=n_pair,
-                    data_loader=val_loader,
-                    TR_label=val_TR_label
-                )
-                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                    n_pair=n_pair,
-                    data_loader=test_loader,
-                    TR_label=test_TR_label
-                )
-
             ### set model and train
             model=DyGFormer(
                 node_dim=node_dim,
@@ -480,63 +280,28 @@ def test_fn(**kwargs):
                 n_layer=n_layer,
                 n_head=n_head
             )
-            model=GNNModelTrainer.train_model(
+            model=GNNModelTrainer.train(
                 model=model,
                 train_loader=train_loader,
                 val_loader=val_loader,
                 val_sample_list=val_sample_list,
-                TR_label=train_TR_label,
+                SR_result=train_SR_result,
+                TR_result=train_TR_result,
                 **model_config
             )
-            acc=GNNModelTrainer.evaluate_model_for_fine_grained_TR(
+            evaluate_result=GNNModelTrainer.evaluate(
                 model=model,
                 val_loader=val_loader,
                 test_loader=test_loader,
                 test_sample_list=test_sample_list,
                 **model_config
             )
-            print(f"Evaluate ACC: {acc}")
+            print(f"Evaluate ACC of {kwargs['model_name']} using {kwargs['sampling']} TR Sampling: {evaluate_result['acc']}")
 
         case "ReaCH-TGN":
-            data=DataUtils.preprocess_graph_dataset(dataset_name=f"enron")
-            graph_df=data["graph_df"]
-            node_ft=data["node_ft"]
-            edge_ft=data["edge_ft"]
-            node_dim=data["node_dim"]
-            edge_dim=data["edge_dim"]
-            graph=TGN_Graph(
-                graph_df=graph_df,
-                node_ft=node_ft,
-                edge_ft=edge_ft,
-                node_dim=node_dim,
-                edge_dim=edge_dim
-            )
-            seed=1
-            graph.set_random_seed(seed=seed)
-
-            ### TR sample 관련 파라미터
-            batch_size=200
-            max_hop=5
-            n_sample=1000
-            n_pair=10
-            evaluate_type=kwargs["evaluate_type"]
-
-            ### 모델 관련 파라미터
-            n_layer=2
-            n_neighbor=10
-            n_head=4
-
-            ### 학습 관련 파라미터
-            time_dim=32
-            latent_dim=32
+            ### ReaCH-TGN 학습 관련 파라미터
             msg_dim=32
             mem_dim=32
-            embed_dim=32
-            epoch=100
-            lr=0.0005
-            optimizer=f"adam"
-            early_stop=True
-            patience=5
 
             ### model config
             model_config={
@@ -544,9 +309,8 @@ def test_fn(**kwargs):
                 "seed":seed,
                 "batch_size":batch_size,
                 "max_hop":max_hop,
-                "n_sample":n_sample,
                 "n_pair":n_pair,
-                "evaluate_type":evaluate_type,
+                "sampling":sampling,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -562,68 +326,6 @@ def test_fn(**kwargs):
                 "patience":patience
             }
 
-            ### set data_loader
-            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
-            val_query_time=val_df["t"].max()
-            test_query_time=test_df["t"].max()
-            train_dataset=TemporalGraphDataset(df=train_df)
-            val_dataset=TemporalGraphDataset(df=val_df)
-            test_dataset=TemporalGraphDataset(df=test_df)
-            train_loader=DataLoader(dataset=train_dataset,batch_size=batch_size,shuffle=False)
-            val_loader=DataLoader(dataset=val_dataset,batch_size=batch_size,shuffle=False)
-            test_loader=DataLoader(dataset=test_dataset,batch_size=batch_size,shuffle=False)
-
-            ### set sample_list
-            train_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="train"
-            )
-            val_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="val"
-            )
-            val_TR_label=val_TR_result["TR_label"]
-            test_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="test"
-            )
-            test_TR_label=test_TR_result["TR_label"]
-            if evaluate_type=="coarse_grained":
-                n_node=graph.get_num_node()
-                val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                    n_node=n_node,
-                    n_sample=n_sample,
-                    n_pair=n_pair,
-                    query_time=val_query_time,
-                    batch_size=batch_size,
-                    TR_label=val_TR_label
-                )
-                test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                    n_node=n_node,
-                    n_sample=n_sample,
-                    n_pair=n_pair,
-                    query_time=test_query_time,
-                    batch_size=batch_size,
-                    TR_label=test_TR_label
-                )
-            else: # fine_grained
-                val_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                    n_pair=n_pair,
-                    data_loader=val_loader,
-                    TR_label=val_TR_label
-                )
-                test_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
-                    n_pair=n_pair,
-                    data_loader=test_loader,
-                    TR_label=test_TR_label
-                )
-
             ### set model and train
             model=ReaCH_TGN(
                 node_dim=node_dim,
@@ -638,22 +340,23 @@ def test_fn(**kwargs):
                 n_neighbor=n_neighbor,
                 n_head=n_head
             )
-            model=ReaCH_TGN_Trainer.train_model(
+            model=ReaCH_TGN_Trainer.train(
                 model=model,
                 train_loader=train_loader,
                 val_loader=val_loader,
                 val_sample_list=val_sample_list,
+                SR_result=train_SR_result,
                 TR_result=train_TR_result,
                 **model_config
             )
-            acc=ReaCH_TGN_Trainer.evaluate_model_for_fine_grained_TR(
+            evaluate_result=ReaCH_TGN_Trainer.evaluate(
                 model=model,
                 val_loader=val_loader,
                 test_loader=test_loader,
                 test_sample_list=test_sample_list,
                 **model_config
             )
-            print(f"Evaluate ACC: {acc}")
+            print(f"Evaluate ACC of {kwargs['model_name']} using {kwargs['sampling']} TR Sampling: {evaluate_result['acc']}")
 
 if __name__=="__main__":
     """
@@ -665,14 +368,14 @@ if __name__=="__main__":
         choices=["TGAT","TGN","DyGFormer","ReaCH-TGN"],
         default=f"TGAT"
     )
-    parser.add_argument("--evaluate_type",
+    parser.add_argument("--sampling",
         type=str,
-        choices=["coarse_grained","fine_grained"],
-        default=f"coarse_grained"
+        choices=["random","hard"],
+        default=f"random"
     )
     args=parser.parse_args()
     test_config={
         "model_name":args.model_name,
-        "evaluate_type":args.evaluate_type
+        "sampling":args.sampling
     }
     test_fn(**test_config)

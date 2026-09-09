@@ -376,7 +376,6 @@ class TR_Sampling:
             remain[:deficit]
         ])
 
-
     @staticmethod
     def hard_TR_sampling(
             sources:list,

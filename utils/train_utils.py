@@ -20,6 +20,23 @@ class TemporalGraphDataset(Dataset):
     def __getitem__(self,idx):
         return self.src[idx],self.dst[idx],self.t[idx],self.edge[idx]
 
+class TRSampleDataset(Dataset):
+    """
+    Walk-based model 학습을 위한 TR sample dataset
+    """
+    def __init__(self,TR_sample:dict[str,torch.Tensor]):
+        self.src=TR_sample["src"]
+        self.dst=TR_sample["dst"]
+        self.label=TR_sample["label"]
+        self.query_t=TR_sample["query_t"]
+        self.pos_mask=TR_sample["pos_mask"]
+
+    def __len__(self):
+        return len(self.src)
+
+    def __getitem__(self,idx):
+        return self.src[idx],self.dst[idx],self.label[idx],self.query_t[idx],self.pos_mask[idx]
+
 class EarlyStopper:
     def __init__(self,
             patience:int=1
@@ -201,88 +218,25 @@ class TrainUtils:
         }
 
     @staticmethod
-    def get_coarse_grained_TR_sample_list(
-            n_node:int,
-            n_sample:int,
+    def get_TR_sample_loader(
             n_pair:int,
-            query_time:float,
-            batch_size:int,
-            TR_label:torch.Tensor
-        )->list[dict[str,torch.Tensor]]:
-        """
-        Walk-based Model 학습용 TR_sample_list 반환.
-
-        Input:
-            n_node
-            n_sample
-            n_pair
-            query_time
-            batch_size
-            TR_label: [batch_len,N+1,N+1] bool tensor
-        Return:
-            batch_TR_sample_list
-        """
-        if batch_size<=0:
-            raise ValueError("batch_size must be positive.")
-
-        TR_sample=TrainUtils.random_src_TR_sampling(
-            n_node=n_node,
-            n_sample=n_sample,
-            n_pair=n_pair,
-            query_time=query_time,
-            TR_label=TR_label[-1]
-        )
-
-        n_TR_sample=TR_sample["src"].size(0)
-        batch_TR_sample_list=[]
-        for start_idx in range(0,n_TR_sample,batch_size):
-            end_idx=min(start_idx+batch_size,n_TR_sample)
-            batch_TR_sample={
-                key:value[start_idx:end_idx]
-                for key,value in TR_sample.items()
-            }
-            batch_TR_sample_list.append(batch_TR_sample)
-        return batch_TR_sample_list
-
-    @staticmethod
-    def get_fine_grained_TR_sample_list(
-            n_pair:int,
-            data_loader:DataLoader,
-            TR_label:torch.Tensor
+            start_query_time:int,
+            end_query_time:int,
+            SR_result:dict[str,torch.Tensor]|None=None,
+            TR_result:dict[str,torch.Tensor]|None=None,
+            sampling:Literal["random","hard"]=f"random"
         ):
         """
-        GNN-based Model 학습용 TR_sample_list 반환.
-
-        Input:
-            n_pair
-            data_loader
-            TR_label: [batch_len,N+1,N+1] bool tensor
-        Return:
-            TR_sample_list
+        Walk-based model 학습을 위한 TR sample data_loader 생성 후 반환
         """
-        TR_sample_list=[]
-        for batch_idx,(src,dst,event_t,_) in tqdm(
-                enumerate(data_loader),
-                desc="Generating TR samples..."
-            ):
-            sources=torch.unique(torch.cat([src,dst])).tolist()
-            query_time=event_t.max().item()
-            TR_sample=TrainUtils.random_TR_sampling(
-                sources=sources,
-                n_pair=n_pair,
-                query_time=query_time,
-                TR_label=TR_label[batch_idx]
-            )
-            TR_sample_list.append(TR_sample)
-        return TR_sample_list
 
     @staticmethod
     def get_TR_sample_list(
             n_pair:int,
             data_loader:DataLoader,
-            SR_result:dict[str,torch.Tensor],
-            TR_result:dict[str,torch.Tensor],
-            sampling:Literal["random","hard"]
+            SR_result:dict[str,torch.Tensor]|None=None,
+            TR_result:dict[str,torch.Tensor]|None=None,
+            sampling:Literal["random","hard"]=f"random"
         ):
         """
         Input:
@@ -294,8 +248,9 @@ class TrainUtils:
         Return:
             TR_sample_list
         """
-        SR_label=SR_result["SR_label"]
-        SR_hop=SR_result["SR_hop"]
+        if SR_result is not None:
+            SR_label=SR_result["SR_label"]
+            SR_hop=SR_result["SR_hop"]
         TR_label=TR_result["TR_label"]
         TR_hop=TR_result["TR_hop"]
         TR_last_t=TR_result["TR_last_t"]

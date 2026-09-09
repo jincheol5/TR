@@ -7,13 +7,16 @@ from utils import TrainUtils,Metric,EarlyStopper
 class WalkModelTrainer:
     """
     Walk-based Model 학습/평가
+
+    수정 필요
     """
     @staticmethod
-    def train_model(
+    def train(
             model:nn.Module,
             train_loader:DataLoader,
             val_sample_list:list,
-            TR_label:torch.Tensor,
+            SR_result:dict[str,torch.Tensor],
+            TR_result:dict[str,torch.Tensor],
             **kwargs
         ):
         """
@@ -74,10 +77,12 @@ class WalkModelTrainer:
         """
         for epoch in tqdm(range(kwargs["epoch"]),desc=f"Model Training..."):
             ### Epoch마다 train_sample_list 생성
-            train_sample_list=TrainUtils.get_fine_grained_TR_sample_list(
+            train_sample_list=TrainUtils.get_TR_sample_list(
                 n_pair=kwargs["n_pair"],
                 data_loader=train_loader,
-                TR_label=TR_label
+                SR_result=SR_result,
+                TR_result=TR_result,
+                sampling=kwargs["sampling"]
             )
 
             model.train()
@@ -110,7 +115,7 @@ class WalkModelTrainer:
             """
             Validate Model
             """
-            val_result=WalkModelTrainer.validate_model(
+            val_result=WalkModelTrainer.validate(
                 model=model,
                 val_sample_list=val_sample_list,
                 **kwargs
@@ -135,7 +140,7 @@ class WalkModelTrainer:
         return model
 
     @staticmethod
-    def validate_model(
+    def validate(
             model,
             val_sample_list:list,
             **kwargs
@@ -186,7 +191,7 @@ class WalkModelTrainer:
         }
 
     @staticmethod
-    def evaluate_model(
+    def evaluate(
             model:nn.Module,
             test_sample_list:list,
             **kwargs
@@ -227,4 +232,9 @@ class WalkModelTrainer:
                     label=label
                 )
                 acc_list.append(batch_acc)
-        return sum(acc_list)/len(acc_list)
+        return {
+            "acc":sum(acc_list)/len(acc_list)
+        }
+
+
+    

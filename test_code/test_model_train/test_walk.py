@@ -38,11 +38,11 @@ def test_fn(**kwargs):
             neighbor_sampling=f"linear"
             walk_epoch=5
 
-            # TR 관련
+            # TR sampling 관련
             batch_size=200
             max_hop=5
-            n_sample=1000
             n_pair=10
+            sampling=kwargs["sampling"]
 
             # 모델 학습 관련
             embed_dim=32
@@ -66,8 +66,8 @@ def test_fn(**kwargs):
                 "walk_epoch":walk_epoch,
                 "batch_size":batch_size,
                 "max_hop":max_hop,
-                "n_sample":n_sample,
                 "n_pair":n_pair,
+                "sampling":sampling,
                 "embed_dim":embed_dim,
                 "latent_dim":latent_dim,
                 "epoch":epoch,
@@ -77,52 +77,14 @@ def test_fn(**kwargs):
                 "patience":patience
             }
 
-            ### set query time
-            val_query_time=val_df["t"].max()
-            test_query_time=test_df["t"].max()
-
             ### set data_loader
+            train_df,val_df,test_df=TrainUtils.split_graph_df(df=graph_df)
             train_dataset=TemporalGraphDataset(df=train_df)
+            val_dataset=TemporalGraphDataset(df=val_df)
+            test_dataset=TemporalGraphDataset(df=test_df)
             train_loader=DataLoader(dataset=train_dataset,batch_size=batch_size,shuffle=False)
-
-            ### set sample_list
-            train_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="train"
-            )
-            train_TR_label=train_TR_result["TR_label"]
-            val_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="val"
-            )
-            val_TR_label=val_TR_result["TR_label"]
-            val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                n_node=n_node,
-                n_sample=n_sample,
-                n_pair=n_pair,
-                query_time=val_query_time,
-                batch_size=batch_size,
-                TR_label=val_TR_label
-            )
-            test_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="test"
-            )
-            test_TR_label=test_TR_result["TR_label"]
-            test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                n_node=n_node,
-                n_sample=n_sample,
-                n_pair=n_pair,
-                query_time=test_query_time,
-                batch_size=batch_size,
-                TR_label=test_TR_label
-            )
+            val_loader=DataLoader(dataset=val_dataset,batch_size=batch_size,shuffle=False)
+            test_loader=DataLoader(dataset=test_dataset,batch_size=batch_size,shuffle=False)
 
             ### set model and train
             model=CTDNE(
@@ -131,19 +93,6 @@ def test_fn(**kwargs):
                 window_size=window_size,
                 graph=graph
             )
-            model=WalkModelTrainer.train_model(
-                model=model,
-                train_loader=train_loader,
-                val_sample_list=val_sample_list,
-                TR_label=train_TR_label,
-                **model_config
-            )
-            acc=WalkModelTrainer.evaluate_model(
-                model=model,
-                test_sample_list=test_sample_list,
-                **model_config
-            )
-            print(f"Evaluate ACC: {acc}")
 
         case "ATDGEB":
             """
@@ -214,43 +163,7 @@ def test_fn(**kwargs):
             train_loader=DataLoader(dataset=train_dataset,batch_size=batch_size,shuffle=False)
 
             ### set sample_list
-            train_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="train"
-            )
-            train_TR_label=train_TR_result["TR_label"]
-            val_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="val"
-            )
-            val_TR_label=val_TR_result["TR_label"]
-            val_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                n_node=n_node,
-                n_sample=n_sample,
-                n_pair=n_pair,
-                query_time=val_query_time,
-                batch_size=batch_size,
-                TR_label=val_TR_label
-            )
-            test_TR_result=DataUtils.load_TR_result(
-                dataset_name=f"enron",
-                max_hop=max_hop,
-                batch_size=batch_size,
-                purpose="test"
-            )
-            test_TR_label=test_TR_result["TR_label"]
-            test_sample_list=TrainUtils.get_coarse_grained_TR_sample_list(
-                n_node=n_node,
-                n_sample=n_sample,
-                n_pair=n_pair,
-                query_time=test_query_time,
-                batch_size=batch_size,
-                TR_label=test_TR_label
-            )
+            
 
             ### set model and train
             model=ATDGEB(
@@ -259,19 +172,6 @@ def test_fn(**kwargs):
                 window_size=window_size,
                 graph=graph
             )
-            model=WalkModelTrainer.train_model(
-                model=model,
-                train_loader=train_loader,
-                val_sample_list=val_sample_list,
-                TR_label=train_TR_label,
-                **model_config
-            )
-            acc=WalkModelTrainer.evaluate_model(
-                model=model,
-                test_sample_list=test_sample_list,
-                **model_config
-            )
-            print(f"Evaluate ACC: {acc}")
 
 if __name__=="__main__":
     """

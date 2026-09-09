@@ -1,13 +1,97 @@
 import argparse
 import numpy as np
 from torch.utils.data import DataLoader
-from utils import DataUtils,TrainUtils,TemporalGraphDataset,Analysis
-from graph import TemporalGraph
+from utils import DataUtils,TrainUtils,TemporalGraphDataset,GraphAnalysis
 
 def main(**kwargs):
-
     match kwargs["app_num"]:
         case 1:
+            """
+            """
+            ### TR result 관련 파라미터
+            batch_size=200
+            max_hop=5
+
+            ### load SR, TR result
+            dataset_name=kwargs["dataset_name"],
+            train_SR_result=DataUtils.load_SR_result(
+                dataset_name=dataset_name,
+                max_hop=max_hop,
+                batch_size=batch_size,
+                purpose="train"
+            )
+            val_SR_result=DataUtils.load_SR_result(
+                dataset_name=dataset_name,
+                max_hop=max_hop,
+                batch_size=batch_size,
+                purpose="val"
+            )
+            test_SR_result=DataUtils.load_SR_result(
+                dataset_name=dataset_name,
+                max_hop=max_hop,
+                batch_size=batch_size,
+                purpose="test"
+            )
+
+            train_TR_result=DataUtils.load_TR_result(
+                dataset_name=dataset_name,
+                max_hop=max_hop,
+                batch_size=batch_size,
+                purpose="train"
+            )
+            val_TR_result=DataUtils.load_TR_result(
+                dataset_name=dataset_name,
+                max_hop=max_hop,
+                batch_size=batch_size,
+                purpose="val"
+            )
+            test_TR_result=DataUtils.load_TR_result(
+                dataset_name=dataset_name,
+                max_hop=max_hop,
+                batch_size=batch_size,
+                purpose="test"
+            )
+
+            ### check train 
+            SR_label=train_SR_result["SR_label"][-1]
+            SR_hop=train_SR_result["SR_hop"][-1]
+            TR_label=train_TR_result["TR_label"][-1]
+            TR_hop=train_TR_result["TR_hop"][-1]
+            TR_ratio=GraphAnalysis.check_reach_ratio(reach_label=TR_label)
+            hard_pos_TR_ratio=GraphAnalysis.check_hard_positive_ratio(TR_label=TR_label,TR_hop=TR_hop)
+            hard_neg_TR_ratio=GraphAnalysis.check_hard_negative_ratio(TR_label=TR_label,SR_label=SR_label,SR_hop=SR_hop)
+            print(f"Check {dataset_name} Train")
+            print(f"{dataset_name} TR_ratio in all pair: {TR_ratio}")
+            print(f"{dataset_name} hard_pos_TR_ratio in all pos pair: {hard_pos_TR_ratio}")
+            print(f"{dataset_name} hard_neg_TR_ratio in all neg pair: {hard_neg_TR_ratio}",end="\n\n")
+
+            ### check val
+            SR_label=val_SR_result["SR_label"][-1]
+            SR_hop=val_SR_result["SR_hop"][-1]
+            TR_label=val_TR_result["TR_label"][-1]
+            TR_hop=val_TR_result["TR_hop"][-1]
+            TR_ratio=GraphAnalysis.check_reach_ratio(reach_label=TR_label)
+            hard_pos_TR_ratio=GraphAnalysis.check_hard_positive_ratio(TR_label=TR_label,TR_hop=TR_hop)
+            hard_neg_TR_ratio=GraphAnalysis.check_hard_negative_ratio(TR_label=TR_label,SR_label=SR_label,SR_hop=SR_hop)
+            print(f"Check {dataset_name} Val")
+            print(f"{dataset_name} TR_ratio in all pair: {TR_ratio}")
+            print(f"{dataset_name} hard_pos_TR_ratio in all pos pair: {hard_pos_TR_ratio}")
+            print(f"{dataset_name} hard_neg_TR_ratio in all neg pair: {hard_neg_TR_ratio}",end="\n\n")
+
+            ### check test
+            SR_label=test_SR_result["SR_label"][-1]
+            SR_hop=test_SR_result["SR_hop"][-1]
+            TR_label=test_TR_result["TR_label"][-1]
+            TR_hop=test_TR_result["TR_hop"][-1]
+            TR_ratio=GraphAnalysis.check_reach_ratio(reach_label=TR_label)
+            hard_pos_TR_ratio=GraphAnalysis.check_hard_positive_ratio(TR_label=TR_label,TR_hop=TR_hop)
+            hard_neg_TR_ratio=GraphAnalysis.check_hard_negative_ratio(TR_label=TR_label,SR_label=SR_label,SR_hop=SR_hop)
+            print(f"Check {dataset_name} Test")
+            print(f"{dataset_name} TR_ratio in all pair: {TR_ratio}")
+            print(f"{dataset_name} hard_pos_TR_ratio in all pos pair: {hard_pos_TR_ratio}")
+            print(f"{dataset_name} hard_neg_TR_ratio in all neg pair: {hard_neg_TR_ratio}",end="\n\n")
+
+        case 2:
             """
             """
             ### TR sample 관련 파라미터
@@ -133,13 +217,13 @@ def main(**kwargs):
                 SR_label=train_SR_result["SR_label"][idx]
                 SR_hop=train_SR_result["SR_hop"][idx]
                 TR_hop=train_TR_result["TR_hop"][idx]
-                pos_ratio=Analysis.check_pos_sample_detail(
+                pos_ratio=GraphAnalysis.check_hard_positive_ratio_in_sample(
                     pos_src=pos_src,
                     pos_dst=pos_dst,
                     TR_hop=TR_hop
                 )
                 pos_ratio_list.append(pos_ratio)
-                neg_ratio=Analysis.check_neg_sample_detail(
+                neg_ratio=GraphAnalysis.check_hard_negative_ratio_in_sample(
                     neg_src=neg_src,
                     neg_dst=neg_dst,
                     SR_label=SR_label,
@@ -163,13 +247,13 @@ def main(**kwargs):
                 SR_label=val_SR_result["SR_label"][idx]
                 SR_hop=val_SR_result["SR_hop"][idx]
                 TR_hop=val_TR_result["TR_hop"][idx]
-                pos_ratio=Analysis.check_pos_sample_detail(
+                pos_ratio=GraphAnalysis.check_hard_positive_ratio_in_sample(
                     pos_src=pos_src,
                     pos_dst=pos_dst,
                     TR_hop=TR_hop
                 )
                 pos_ratio_list.append(pos_ratio)
-                neg_ratio=Analysis.check_neg_sample_detail(
+                neg_ratio=GraphAnalysis.check_hard_negative_ratio_in_sample(
                     neg_src=neg_src,
                     neg_dst=neg_dst,
                     SR_label=SR_label,
@@ -193,13 +277,13 @@ def main(**kwargs):
                 SR_label=test_SR_result["SR_label"][idx]
                 SR_hop=test_SR_result["SR_hop"][idx]
                 TR_hop=test_TR_result["TR_hop"][idx]
-                pos_ratio=Analysis.check_pos_sample_detail(
+                pos_ratio=GraphAnalysis.check_hard_positive_ratio_in_sample(
                     pos_src=pos_src,
                     pos_dst=pos_dst,
                     TR_hop=TR_hop
                 )
                 pos_ratio_list.append(pos_ratio)
-                neg_ratio=Analysis.check_neg_sample_detail(
+                neg_ratio=GraphAnalysis.check_hard_negative_ratio_in_sample(
                     neg_src=neg_src,
                     neg_dst=neg_dst,
                     SR_label=SR_label,

@@ -41,6 +41,8 @@ def test_fn(**kwargs):
     max_hop=5
     n_pair=10
     sampling=kwargs["sampling"]
+    pos_hard_ratio=kwargs["multi_hop_ratio"]
+    neg_hard_ratio=kwargs["SR_ratio"]
 
     ### 모델 관련 파라미터
     n_layer=1

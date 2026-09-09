@@ -65,6 +65,8 @@ def test_fn(**kwargs):
             last_batch_event=batches[-1]
 
             sources=[1,2,3]
+            multi_hop_ratio=0.5
+            SR_ratio=0.5
             first_result=TR_Sampling.hard_TR_sampling(
                 sources=sources,
                 n_pair=10,
@@ -74,7 +76,9 @@ def test_fn(**kwargs):
                 SR_hop=SR_hop[0],
                 TR_label=TR_label[0],
                 TR_hop=TR_hop[0],
-                TR_last_t=TR_last_t[0]
+                TR_last_t=TR_last_t[0],
+                multi_hop_ratio=multi_hop_ratio,
+                SR_ratio=SR_ratio
             )
             print(f"first sample size: {first_result['src'].size(0)}")
             print(f"first positive sample size: {first_result['pos_mask'].sum().item()}")
@@ -89,7 +93,9 @@ def test_fn(**kwargs):
                 SR_hop=SR_hop[-1],
                 TR_label=TR_label[-1],
                 TR_hop=TR_hop[-1],
-                TR_last_t=TR_last_t[-1]
+                TR_last_t=TR_last_t[-1],
+                multi_hop_ratio=multi_hop_ratio,
+                SR_ratio=SR_ratio
             )
             print(f"last sample size: {last_result['src'].size(0)}")
             print(f"last positive sample size: {last_result['pos_mask'].sum().item()}")

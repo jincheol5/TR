@@ -236,78 +236,104 @@ class TR_Sampling:
             end_query_time:float,
             TR_label:torch.Tensor,
             TR_hop:torch.Tensor,
-            TR_last_t:torch.Tensor
+            TR_last_t:torch.Tensor,
+            pos_hard_ratio:float=0.5
         )->torch.Tensor:
+        """
+        pos_hard_ratio: 2-hop 이상 TR 비율
+        """
         pos_nodes=torch.nonzero(TR_label[source]).flatten()
         pos_nodes=pos_nodes[
             (pos_nodes!=0)&
             (pos_nodes!=source)
         ]
 
-        n_one=int(n_pair*0.2)
-        n_two=n_pair-n_one
+        n_multi_hop=int(n_pair*pos_hard_ratio)
+        n_one_hop=n_pair-n_multi_hop
 
-        one_nodes=pos_nodes[TR_hop[source,pos_nodes]==1]
-        two_nodes=pos_nodes[TR_hop[source,pos_nodes]>=2]
+        one_hop_nodes=pos_nodes[
+            TR_hop[source,pos_nodes]==1
+        ]
+        multi_hop_nodes=pos_nodes[
+            TR_hop[source,pos_nodes]>=2
+        ]
 
         # start_query_time 이후 reachable 된 node 우선
-        one_priority_mask=(
-            (TR_last_t[source,one_nodes]>start_query_time)&
-            (TR_last_t[source,one_nodes]<=end_query_time)
+        one_hop_priority_mask=(
+            (TR_last_t[source,one_hop_nodes]>start_query_time)&
+            (TR_last_t[source,one_hop_nodes]<=end_query_time)
         )
-        two_priority_mask=(
-            (TR_last_t[source,two_nodes]>start_query_time)&
-            (TR_last_t[source,two_nodes]<=end_query_time)
+        multi_hop_priority_mask=(
+            (TR_last_t[source,multi_hop_nodes]>start_query_time)&
+            (TR_last_t[source,multi_hop_nodes]<=end_query_time)
         )
 
-        one_priority=one_nodes[one_priority_mask]
-        one_other=one_nodes[~one_priority_mask]
-        two_priority=two_nodes[two_priority_mask]
-        two_other=two_nodes[~two_priority_mask]
+        one_hop_priority=one_hop_nodes[one_hop_priority_mask]
+        one_hop_other=one_hop_nodes[~one_hop_priority_mask]
 
-        if one_priority.numel()>0:
-            one_priority=one_priority[
+        multi_hop_priority=multi_hop_nodes[multi_hop_priority_mask]
+        multi_hop_other=multi_hop_nodes[~multi_hop_priority_mask]
+
+        if one_hop_priority.numel()>0:
+            one_hop_priority=one_hop_priority[
                 torch.randperm(
-                    one_priority.numel(),
-                    device=one_priority.device
-                )
-            ]
-        if one_other.numel()>0:
-            one_other=one_other[
-                torch.randperm(
-                    one_other.numel(),
-                    device=one_other.device
-                )
-            ]
-        if two_priority.numel()>0:
-            two_priority=two_priority[
-                torch.randperm(
-                    two_priority.numel(),
-                    device=two_priority.device
-                )
-            ]
-        if two_other.numel()>0:
-            two_other=two_other[
-                torch.randperm(
-                    two_other.numel(),
-                    device=two_other.device
+                    one_hop_priority.numel(),
+                    device=one_hop_priority.device
                 )
             ]
 
-        one_nodes=torch.cat([one_priority,one_other])
-        two_nodes=torch.cat([two_priority,two_other])
+        if one_hop_other.numel()>0:
+            one_hop_other=one_hop_other[
+                torch.randperm(
+                    one_hop_other.numel(),
+                    device=one_hop_other.device
+                )
+            ]
 
-        # 2-hop 이상 우선 80%
-        n_two_sample=min(n_two,two_nodes.numel())
-        selected_two=two_nodes[:n_two_sample]
+        if multi_hop_priority.numel()>0:
+            multi_hop_priority=multi_hop_priority[
+                torch.randperm(
+                    multi_hop_priority.numel(),
+                    device=multi_hop_priority.device
+                )
+            ]
 
-        # 1-hop 20% + 2-hop 부족분
-        n_one_sample=min(n_pair-n_two_sample,one_nodes.numel())
-        selected_one=one_nodes[:n_one_sample]
+        if multi_hop_other.numel()>0:
+            multi_hop_other=multi_hop_other[
+                torch.randperm(
+                    multi_hop_other.numel(),
+                    device=multi_hop_other.device
+                )
+            ]
+
+        one_hop_nodes=torch.cat([one_hop_priority,one_hop_other])
+        multi_hop_nodes=torch.cat([multi_hop_priority,multi_hop_other])
+
+        # multi-hop을 지정 비율만큼 샘플링
+        n_multi_hop_sample=min(
+            n_multi_hop,
+            multi_hop_nodes.numel()
+        )
+        selected_multi_hop=multi_hop_nodes[
+            :n_multi_hop_sample
+        ]
+
+        # multi-hop 부족분을 1-hop으로 보충
+        multi_hop_shortage=(
+            n_multi_hop-n_multi_hop_sample
+        )
+
+        n_one_hop_sample=min(
+            n_one_hop+multi_hop_shortage,
+            one_hop_nodes.numel()
+        )
+        selected_one_hop=one_hop_nodes[
+            :n_one_hop_sample
+        ]
 
         return torch.cat([
-            selected_one,
-            selected_two
+            selected_one_hop,
+            selected_multi_hop
         ])
 
     @staticmethod
@@ -316,51 +342,55 @@ class TR_Sampling:
             n_pair:int,
             SR_label:torch.Tensor,
             SR_hop:torch.Tensor,
-            TR_label:torch.Tensor
+            TR_label:torch.Tensor,
+            neg_hard_ratio:float=0.5
         )->torch.Tensor:
+        """
+        neg_hard_ratio: SR이지만 not TR인 sample 비율
+        """
         neg_nodes=torch.nonzero(~TR_label[source]).flatten()
         neg_nodes=neg_nodes[
             (neg_nodes!=0)&
             (neg_nodes!=source)
         ]
 
-        n_both=int(n_pair*0.2)
-        n_static=n_pair-n_both
+        n_SR=int(n_pair*neg_hard_ratio)
+        n_both_unreachable=n_pair-n_SR
 
         # static / temporal 모두 unreachable
-        both_nodes=neg_nodes[~SR_label[source,neg_nodes]]
+        both_unreachable_nodes=neg_nodes[~SR_label[source,neg_nodes]]
 
-        # static 2-hop 이상 reachable / temporal unreachable
-        static_nodes=neg_nodes[
-            SR_label[source,neg_nodes]&
-            (SR_hop[source,neg_nodes]>=2)
-        ]
+        # static에서는 2-hop 이상 reachable / temporal에서는 unreachable
+        SR_nodes=neg_nodes[SR_label[source,neg_nodes]&(SR_hop[source,neg_nodes]>=2)]
 
-        if both_nodes.numel()>0:
-            both_nodes=both_nodes[
+        if both_unreachable_nodes.numel()>0:
+            both_unreachable_nodes=both_unreachable_nodes[
                 torch.randperm(
-                    both_nodes.numel(),
-                    device=both_nodes.device
-                )
-            ]
-        if static_nodes.numel()>0:
-            static_nodes=static_nodes[
-                torch.randperm(
-                    static_nodes.numel(),
-                    device=static_nodes.device
+                    both_unreachable_nodes.numel(),
+                    device=both_unreachable_nodes.device
                 )
             ]
 
-        n_both_sample=min(n_both,both_nodes.numel())
-        n_static_sample=min(n_static,static_nodes.numel())
-        selected_both=both_nodes[:n_both_sample]
-        selected_static=static_nodes[:n_static_sample]
+        if SR_nodes.numel()>0:
+            SR_nodes=SR_nodes[
+                torch.randperm(
+                    SR_nodes.numel(),
+                    device=SR_nodes.device
+                )
+            ]
+
+        n_both_unreachable_sample=min(n_both_unreachable,both_unreachable_nodes.numel())
+        n_SR_sample=min(n_SR,SR_nodes.numel())
+
+        selected_both_unreachable=both_unreachable_nodes[:n_both_unreachable_sample]
+        selected_SR=SR_nodes[:n_SR_sample]
 
         # 한 조건이 부족하면 다른 조건의 남은 후보로 보충
-        deficit=(n_pair-n_both_sample-n_static_sample)
+        deficit=(n_pair-n_both_unreachable_sample-n_SR_sample)
+
         remain=torch.cat([
-            both_nodes[n_both_sample:],
-            static_nodes[n_static_sample:]
+            both_unreachable_nodes[n_both_unreachable_sample:],
+            SR_nodes[n_SR_sample:]
         ])
 
         if remain.numel()>0:
@@ -370,9 +400,10 @@ class TR_Sampling:
                     device=remain.device
                 )
             ]
+
         return torch.cat([
-            selected_both,
-            selected_static,
+            selected_both_unreachable,
+            selected_SR,
             remain[:deficit]
         ])
 
@@ -386,7 +417,9 @@ class TR_Sampling:
             SR_hop:torch.Tensor,
             TR_label:torch.Tensor,
             TR_hop:torch.Tensor,
-            TR_last_t:torch.Tensor
+            TR_last_t:torch.Tensor,
+            pos_hard_ratio:float=0.5,
+            neg_hard_ratio:float=0.5
         )->dict[str,torch.Tensor]:
         """
         << Hard TR Sampling >>
@@ -453,7 +486,8 @@ class TR_Sampling:
                 end_query_time=end_query_time,
                 TR_label=TR_label,
                 TR_hop=TR_hop,
-                TR_last_t=TR_last_t
+                TR_last_t=TR_last_t,
+                pos_hard_ratio=pos_hard_ratio
             )
 
             if pos_selected.numel()>0:
@@ -471,7 +505,6 @@ class TR_Sampling:
                         dtype=torch.float32
                     )
                 )
-
                 n_pos+=pos_selected.numel()
 
             # negative
@@ -480,9 +513,9 @@ class TR_Sampling:
                 n_pair=n_pair,
                 SR_label=SR_label,
                 SR_hop=SR_hop,
-                TR_label=TR_label
+                TR_label=TR_label,
+                neg_hard_ratio=neg_hard_ratio
             )
-
             if neg_selected.numel()>0:
                 sampled_src.append(
                     torch.full_like(
@@ -498,7 +531,6 @@ class TR_Sampling:
                         dtype=torch.float32
                     )
                 )
-
                 n_neg+=neg_selected.numel()
 
         ### 기존 sources에 포함되지 않은 source 후보
@@ -508,9 +540,10 @@ class TR_Sampling:
             for source in range(1,n_node+1)
             if source not in used_sources
         ]
-
         if extra_sources:
-            perm=torch.randperm(len(extra_sources)).tolist()
+            perm=torch.randperm(
+                len(extra_sources)
+            ).tolist()
             extra_sources=[
                 extra_sources[i]
                 for i in perm
@@ -536,7 +569,8 @@ class TR_Sampling:
                         end_query_time=end_query_time,
                         TR_label=TR_label,
                         TR_hop=TR_hop,
-                        TR_last_t=TR_last_t
+                        TR_last_t=TR_last_t,
+                        pos_hard_ratio=pos_hard_ratio
                     )
 
                 # deficit < n_pair → Random Sampling
@@ -555,20 +589,9 @@ class TR_Sampling:
                     ]
 
                 if selected.numel()>0:
-                    sampled_src.append(
-                        torch.full_like(
-                            selected,
-                            source,
-                            dtype=torch.long
-                        )
-                    )
+                    sampled_src.append(torch.full_like(selected,source,dtype=torch.long))
                     sampled_dst.append(selected)
-                    sampled_label.append(
-                        torch.ones_like(
-                            selected,
-                            dtype=torch.float32
-                        )
-                    )
+                    sampled_label.append(torch.ones_like(selected,dtype=torch.float32))
                     n_pos+=selected.numel()
 
             ### Negative 보충
@@ -582,7 +605,8 @@ class TR_Sampling:
                         n_pair=n_pair,
                         SR_label=SR_label,
                         SR_hop=SR_hop,
-                        TR_label=TR_label
+                        TR_label=TR_label,
+                        neg_hard_ratio=neg_hard_ratio
                     )
 
                 # deficit < n_pair → Random Sampling
@@ -601,21 +625,11 @@ class TR_Sampling:
                     ]
 
                 if selected.numel()>0:
-                    sampled_src.append(
-                        torch.full_like(
-                            selected,
-                            source,
-                            dtype=torch.long
-                        )
-                    )
+                    sampled_src.append(torch.full_like(selected,source,dtype=torch.long))
                     sampled_dst.append(selected)
-                    sampled_label.append(
-                        torch.zeros_like(
-                            selected,
-                            dtype=torch.float32
-                        )
-                    )
+                    sampled_label.append(torch.zeros_like(selected,dtype=torch.float32))
                     n_neg+=selected.numel()
+
         ### 결과 tensor
         src=torch.cat(sampled_src)
         dst=torch.cat(sampled_dst)

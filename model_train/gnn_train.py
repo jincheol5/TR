@@ -61,7 +61,9 @@ class GNNModelTrainer:
                 data_loader=train_loader,
                 SR_result=SR_result,
                 TR_result=TR_result,
-                sampling=kwargs["sampling"]
+                sampling=kwargs["sampling"],
+                pos_hard_ratio=kwargs["pos_hard_ratio"],
+                neg_hard_ratio=kwargs["neg_hard_ratio"]
             )
 
             model.train()

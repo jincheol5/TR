@@ -41,8 +41,8 @@ def test_fn(**kwargs):
     max_hop=5
     n_pair=10
     sampling=kwargs["sampling"]
-    pos_hard_ratio=kwargs["multi_hop_ratio"]
-    neg_hard_ratio=kwargs["SR_ratio"]
+    pos_hard_ratio=kwargs["pos_hard_ratio"]
+    neg_hard_ratio=kwargs["neg_hard_ratio"]
 
     ### 모델 관련 파라미터
     n_layer=1
@@ -121,6 +121,8 @@ def test_fn(**kwargs):
                 "max_hop":max_hop,
                 "n_pair":n_pair,
                 "sampling":sampling,
+                "pos_hard_ratio":pos_hard_ratio,
+                "neg_hard_ratio":neg_hard_ratio,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -177,6 +179,8 @@ def test_fn(**kwargs):
                 "max_hop":max_hop,
                 "n_pair":n_pair,
                 "sampling":sampling,
+                "pos_hard_ratio":pos_hard_ratio,
+                "neg_hard_ratio":neg_hard_ratio,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -252,6 +256,8 @@ def test_fn(**kwargs):
                 "max_hop":max_hop,
                 "n_pair":n_pair,
                 "sampling":sampling,
+                "pos_hard_ratio":pos_hard_ratio,
+                "neg_hard_ratio":neg_hard_ratio,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -316,6 +322,8 @@ def test_fn(**kwargs):
                 "max_hop":max_hop,
                 "n_pair":n_pair,
                 "sampling":sampling,
+                "pos_hard_ratio":pos_hard_ratio,
+                "neg_hard_ratio":neg_hard_ratio,
                 "n_layer":n_layer,
                 "n_neighbor":n_neighbor,
                 "n_head":n_head,
@@ -378,9 +386,13 @@ if __name__=="__main__":
         choices=["random","hard"],
         default=f"random"
     )
+    parser.add_argument("--pos_hard_ratio",type=float,default=0.5)
+    parser.add_argument("--neg_hard_ratio",type=float,default=0.5)
     args=parser.parse_args()
     test_config={
         "model_name":args.model_name,
-        "sampling":args.sampling
+        "sampling":args.sampling,
+        "pos_hard_ratio":args.pos_hard_ratio,
+        "neg_hard_ratio":args.neg_hard_ratio
     }
     test_fn(**test_config)

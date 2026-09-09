@@ -250,7 +250,9 @@ class TrainUtils:
             data_loader:DataLoader,
             SR_result:dict[str,torch.Tensor]|None=None,
             TR_result:dict[str,torch.Tensor]|None=None,
-            sampling:Literal["random","hard"]=f"random"
+            sampling:Literal["random","hard"]=f"random",
+            pos_hard_ratio:float=0.5,
+            neg_hard_ratio:float=0.5
         ):
         """
         Input:
@@ -259,6 +261,8 @@ class TrainUtils:
             SR_result
             TR_result
             sampling
+            pos_hard_ratio
+            neg_hard_ratio
         Return:
             TR_sample_list
         """
@@ -294,7 +298,69 @@ class TrainUtils:
                         SR_hop=SR_hop[batch_idx],
                         TR_label=TR_label[batch_idx],
                         TR_hop=TR_hop[batch_idx],
-                        TR_last_t=TR_last_t[batch_idx]
+                        TR_last_t=TR_last_t[batch_idx],
+                        pos_hard_ratio=pos_hard_ratio,
+                        neg_hard_ratio=neg_hard_ratio
                     )
             TR_sample_list.append(TR_sample)
         return TR_sample_list
+
+class Analysis:
+    @staticmethod
+    def check_pos_sample_detail(
+            pos_src:torch.Tensor,
+            pos_dst:torch.Tensor,
+            TR_hop:torch.Tensor
+        ):
+        """
+        positive sample 중 2-hop 이상에서 TR인 node pair 비율 확인
+        
+        Input:
+            pos_src: [pos_N,]
+            pos_dst: [pos_N,]
+            TR_hop: [N+1,N+1] 
+        """
+        hop=TR_hop[pos_src,pos_dst]
+        multi_hop_mask=hop>=2
+        n_total=hop.numel()
+        n_multi_hop=multi_hop_mask.sum().item()
+        multi_hop_ratio=n_multi_hop/n_total
+        # print(
+        #     f"Positive Sample: {n_total} | "
+        #     f"1-hop: {n_total-n_multi_hop} | "
+        #     f"2-hop+: {n_multi_hop} | "
+        #     f"2-hop+ Ratio: {multi_hop_ratio:.4f}"
+        # )
+        return multi_hop_ratio
+
+    @staticmethod
+    def check_neg_sample_detail(
+            neg_src:torch.Tensor,
+            neg_dst:torch.Tensor,
+            SR_label:torch.Tensor,
+            SR_hop:torch.Tensor
+        ):
+        """
+        negative sample 중 2-hop 이상의 static path로는 reachable 하지만, temporal path로는 unreachable한 node pair 비율 확인 
+
+        Input:
+            neg_src: [neg_N,]
+            neg_dst: [neg_N,]
+            SR_label: [N+1,N+1]
+            SR_hop: [N+1,N+1]
+        """
+        sr_label=SR_label[neg_src,neg_dst]
+        sr_hop=SR_hop[neg_src,neg_dst]
+        SR_mask=(
+            sr_label&
+            (sr_hop>=2)
+        )
+        n_total=neg_src.numel()
+        n_SR=SR_mask.sum().item()
+        SR_ratio=n_SR/n_total
+        # print(
+        #     f"Negative Sample: {n_total} | "
+        #     f"Static 2-hop+ Reachable: {n_SR} | "
+        #     f"SR Ratio: {SR_ratio:.4f}"
+        # )
+        return SR_ratio

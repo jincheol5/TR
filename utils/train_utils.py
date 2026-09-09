@@ -1,3 +1,5 @@
+import os
+import random
 import pandas as pd
 import numpy as np
 import torch
@@ -85,6 +87,18 @@ class EarlyStopper:
         return model
 
 class TrainUtils:
+    @staticmethod
+    def set_seed(seed:int):
+        os.environ["PYTHONHASHSEED"]=str(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic=True
+        torch.backends.cudnn.benchmark=False
+
     @staticmethod
     def split_graph_df(
             df:pd.DataFrame,

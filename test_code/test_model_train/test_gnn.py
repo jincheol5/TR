@@ -30,7 +30,10 @@ def test_fn(**kwargs):
         node_dim=node_dim,
         edge_dim=edge_dim
     )
+
+    ### set random seed
     seed=1
+    TrainUtils.set_seed(seed=seed)
     graph.set_random_seed(seed=seed)
 
     ### TR sample 관련 파라미터

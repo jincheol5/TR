@@ -48,7 +48,7 @@ def test_fn(**kwargs):
     time_dim=32
     latent_dim=32
     embed_dim=32
-    epoch=2
+    epoch=100
     lr=0.0005
     optimizer=f"adam"
     early_stop=True
